@@ -196,7 +196,7 @@ class DashboardViewModel : ViewModel() {
         _totalIncomeThisMonthText.value = CurrencyFormatter.format(thisCycleIncome, currency)
 
         _isSpendingUp.value = lastCycleCost > 0 && thisCycleCost >= lastCycleCost
-        _monthOverMonthText.value = if (lastCycleCost == 0) {
+        _monthOverMonthText.value = if (lastCycleCost == 0.0) {
             "New cycle"
         } else {
             val arrow = if (thisCycleCost >= lastCycleCost) "\u2191" else "\u2193"
@@ -245,6 +245,15 @@ class DashboardViewModel : ViewModel() {
     fun dismissDetail() {
         _isDetailVisible.value = false
         _selectedReceipt.value = null
+    }
+
+    fun deleteReceipt(receipt: Receipt) {
+        viewModelScope.launch {
+            _isBusy.value = true
+            receiptRepo.deleteReceipt(receipt)
+            fetchData()
+            _isBusy.value = false
+        }
     }
 
     fun setIsRefreshing(value: Boolean) {

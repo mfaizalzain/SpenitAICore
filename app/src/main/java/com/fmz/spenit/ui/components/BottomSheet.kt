@@ -25,10 +25,10 @@ fun BottomSheetDialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
-        BottomSheet(
-            modifier = Modifier.fillMaxWidth(),
-            onDismissRequest = onDismiss,
-            tonalElevation = 8.dp
+        Surface(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+            tonalElevation = 8.dp,
+            shape = MaterialTheme.shapes.extraLarge
         ) {
             Column(
                 modifier = Modifier
@@ -77,10 +77,10 @@ fun FullBottomSheet(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
-        BottomSheet(
-            modifier = Modifier.fillMaxWidth(),
-            onDismissRequest = onDismiss,
-            tonalElevation = 8.dp
+        Surface(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+            tonalElevation = 8.dp,
+            shape = MaterialTheme.shapes.extraLarge
         ) {
             Column(
                 modifier = Modifier

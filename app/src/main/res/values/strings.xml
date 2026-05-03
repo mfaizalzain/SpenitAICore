@@ -63,4 +63,7 @@
     <string name="period_last_90">Last 90 Days</string>
     <string name="period_this_year">This Year</string>
     <string name="period_all">All Time</string>
+    <string name="google_client_id">
+        798538506657-g2dtje2olob3i8n5rrtqetsnbfse0v2r.apps.googleusercontent.com
+    </string>
 </resources>

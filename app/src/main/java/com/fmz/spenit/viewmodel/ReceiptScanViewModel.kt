@@ -9,7 +9,9 @@ import com.fmz.spenit.data.db.entity.ReceiptItem
 import com.fmz.spenit.util.DateUtils
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.serializer
 
 class ReceiptScanViewModel : ViewModel() {
 
@@ -149,7 +151,7 @@ class ReceiptScanViewModel : ViewModel() {
                     .split(",", ";")
                     .map { it.trim() }
                     .filter { it.isNotEmpty() }
-                val tagsJson = Json.encodeToString(kotlinx.serialization.builtins.ListSerializer(kotlinx.serialization.builtins.serializer<String>()), tags)
+                val tagsJson = Json.encodeToString(tags)
 
                 val receipt = Receipt(
                     merchant = _merchant.value,
