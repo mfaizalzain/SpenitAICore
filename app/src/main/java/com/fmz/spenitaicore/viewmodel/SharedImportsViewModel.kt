@@ -2,6 +2,7 @@ package com.fmz.spenitaicore.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import android.net.Uri
 import com.fmz.spenitaicore.SpenItApp
 import com.fmz.spenitaicore.ai.FinancialDocumentType
 import com.fmz.spenitaicore.data.db.entity.IncomeEntry
@@ -26,6 +27,7 @@ class SharedImportsViewModel : ViewModel() {
     private val receiptRepo = container.receiptRepository
     private val incomeRepo = container.incomeRepository
     private val preferences = container.preferences
+    private val appContext = SpenItApp.instance.applicationContext
 
     private val _imports = MutableStateFlow<List<SharedImportItem>>(emptyList())
     val imports: StateFlow<List<SharedImportItem>> = _imports
@@ -449,9 +451,19 @@ class SharedImportsViewModel : ViewModel() {
     }
 
     private fun readCsvRows(path: String): List<List<String>> {
-        return File(path).readLines()
+        return readTextFromPath(path).lineSequence()
             .filter { it.isNotBlank() }
             .map { it.parseCsvLine() }
+            .toList()
+    }
+
+    private fun readTextFromPath(path: String): String {
+        return if (path.startsWith("content://") || path.startsWith("file://")) {
+            appContext.contentResolver.openInputStream(Uri.parse(path))?.bufferedReader()?.use { it.readText() }
+                ?: ""
+        } else {
+            File(path).readText()
+        }
     }
 
     private fun String.parseCsvLine(): List<String> {

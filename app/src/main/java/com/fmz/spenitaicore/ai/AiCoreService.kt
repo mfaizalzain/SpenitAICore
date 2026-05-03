@@ -17,8 +17,13 @@ import com.fmz.spenitaicore.util.DateUtils
 import com.fmz.spenitaicore.viewmodel.ExpensesViewModel
 import com.google.mlkit.genai.prompt.Generation
 import com.google.mlkit.genai.prompt.GenerateContentRequest
+import com.google.mlkit.genai.prompt.GenerativeModel
 import com.google.mlkit.genai.prompt.TextPart
 import com.google.mlkit.genai.prompt.ImagePart
+import com.google.mlkit.genai.prompt.ModelPreference
+import com.google.mlkit.genai.prompt.ModelReleaseStage
+import com.google.mlkit.genai.prompt.generationConfig
+import com.google.mlkit.genai.prompt.modelConfig
 import com.google.mlkit.genai.common.FeatureStatus
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -55,7 +60,23 @@ class AiCoreService(
         }
     }
 
-    private val generativeModel = Generation.getClient()
+    private val previewFullModel = Generation.getClient(
+        generationConfig {
+            modelConfig = modelConfig {
+                releaseStage = ModelReleaseStage.PREVIEW
+                preference = ModelPreference.FULL
+            }
+        }
+    )
+    private val previewFastModel = Generation.getClient(
+        generationConfig {
+            modelConfig = modelConfig {
+                releaseStage = ModelReleaseStage.PREVIEW
+                preference = ModelPreference.FAST
+            }
+        }
+    )
+    private val stableModel = Generation.getClient()
 
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -66,11 +87,7 @@ class AiCoreService(
 
         return try {
             val bitmap = loadBitmapFromPath(imagePath) ?: return FinancialDocumentType.Unknown
-            val status = generativeModel.checkStatus()
-            if (status != FeatureStatus.AVAILABLE) {
-                Log.w("AiCoreService", "Model not available. Status=$status")
-                return FinancialDocumentType.Unknown
-            }
+            val model = getAvailableModel() ?: return FinancialDocumentType.Unknown
 
             val prompt = """
                 Classify this financial document into exactly one type:
@@ -91,7 +108,7 @@ class AiCoreService(
                 TextPart(prompt)
             ).build()
 
-            val response = generativeModel.generateContent(request)
+            val response = model.generateContent(request)
             val jsonStr = response.candidates.firstOrNull()?.text?.trim()
                 ?: return FinancialDocumentType.Unknown
             val jsonObj = parseFirstJsonObject(jsonStr) ?: return FinancialDocumentType.Unknown
@@ -114,11 +131,7 @@ class AiCoreService(
         Log.d("AiCoreService", "Starting receipt extraction for: $imagePath")
         return try {
             val bitmap = loadBitmapFromPath(imagePath) ?: return null
-            val status = generativeModel.checkStatus()
-            if (status != FeatureStatus.AVAILABLE) {
-                Log.w("AiCoreService", "Model not available. Status=$status")
-                return null
-            }
+            val model = getAvailableModel() ?: return null
 
             val prompt = """
                 Extract from this receipt: merchant, date (YYYY-MM-DD), total, tax, category from [${ExpensesViewModel.SPENDING_CATEGORIES.joinToString(", ")}].
@@ -130,7 +143,7 @@ class AiCoreService(
                 TextPart(prompt)
             ).build()
 
-            val response = generativeModel.generateContent(request)
+            val response = model.generateContent(request)
             val jsonStr = response.candidates.firstOrNull()?.text
                 ?.replace("```json", "")?.replace("```", "")?.trim()
                 ?: return null
@@ -172,11 +185,7 @@ class AiCoreService(
         Log.d("AiCoreService", "Starting income extraction for: $imagePath")
         return try {
             val bitmap = loadBitmapFromPath(imagePath) ?: return null
-            val status = generativeModel.checkStatus()
-            if (status != FeatureStatus.AVAILABLE) {
-                Log.w("AiCoreService", "Model not available. Status=$status")
-                return null
-            }
+            val model = getAvailableModel() ?: return null
 
             val prompt = """
                 Read this income document. It can be a pay slip or a bank statement.
@@ -200,7 +209,7 @@ class AiCoreService(
                 TextPart(prompt)
             ).build()
 
-            val response = generativeModel.generateContent(request)
+            val response = model.generateContent(request)
             val jsonStr = response.candidates.firstOrNull()?.text
                 ?.replace("```json", "")?.replace("```", "")?.trim()
                 ?: return null
@@ -255,11 +264,7 @@ class AiCoreService(
         Log.d("AiCoreService", "Starting bank statement extraction for: $imagePath")
         return try {
             val bitmap = loadBitmapFromPath(imagePath) ?: return null
-            val status = generativeModel.checkStatus()
-            if (status != FeatureStatus.AVAILABLE) {
-                Log.w("AiCoreService", "Model not available. Status=$status")
-                return null
-            }
+            val model = getAvailableModel() ?: return null
 
             val prompt = """
                 Look at this bank statement image. Extract ALL transactions visible.
@@ -274,54 +279,74 @@ class AiCoreService(
                 TextPart(prompt)
             ).build()
 
-            val response = generativeModel.generateContent(request)
+            val response = model.generateContent(request)
             val jsonStr = response.candidates.firstOrNull()?.text
                 ?.replace("```json", "")?.replace("```", "")?.trim()
                 ?: return null
 
             Log.d("AiCoreService", "Bank statement JSON: ${jsonStr.take(200)}...")
-            val jsonObj = parseFirstJsonObject(jsonStr) ?: return null
+            val jsonElement = parseFirstJsonElement(jsonStr) ?: return null
+            val jsonObj = jsonElement as? JsonObject
+            val transactionElements = when (jsonElement) {
+                is JsonArray -> jsonElement
+                is JsonObject -> jsonElement.arrayValue(
+                    "transactions",
+                    "transaction",
+                    "entries",
+                    "rows",
+                    "items",
+                    "statementLines",
+                    "statement lines"
+                )
+                else -> null
+            }
 
-            val transactions = jsonObj["transactions"]?.jsonArray?.map {
-                val t = it.jsonObject
-                val type = t.stringValue("type", "transactionType", "transaction type")
-                val amountFromText = t.amountTextValue("amountText", "amount text", "rawAmount", "raw amount")
-                val amountFromNumber = t.amountValue(
-                    "amount",
-                    "transactionAmount",
-                    "transaction amount",
-                    "credit",
-                    "debit",
-                    "moneyIn",
-                    "money in",
-                    "moneyOut",
-                    "money out"
-                )
-                val signedAmount = amountFromText ?: amountFromNumber ?: 0.0
-                val normalizedType = when {
-                    type.equals("credit", ignoreCase = true) -> "credit"
-                    type.equals("debit", ignoreCase = true) -> "debit"
-                    signedAmount >= 0.0 -> "credit"
-                    else -> "debit"
-                }
-                BankTransaction(
-                    date = t.stringValue("date", "transactionDate", "transaction date"),
-                    description = t.stringValue("description", "details", "narration", "reference"),
-                    amount = if (normalizedType == "credit") kotlin.math.abs(signedAmount) else -kotlin.math.abs(signedAmount),
-                    type = normalizedType
-                )
+            val transactions = transactionElements?.mapNotNull { element ->
+                (element as? JsonObject)?.toBankTransaction()
             } ?: emptyList()
 
             BankStatementResult(
-                bankName = jsonObj.stringValue("bankName", "bank name", "bank"),
-                accountLast4 = jsonObj.stringValue("accountLast4", "account last 4", "accountNumber", "account number"),
-                period = jsonObj.stringValue("period", "statementPeriod", "statement period"),
+                bankName = jsonObj?.stringValue("bankName", "bank name", "bank").orEmpty(),
+                accountLast4 = jsonObj?.stringValue("accountLast4", "account last 4", "accountNumber", "account number").orEmpty(),
+                period = jsonObj?.stringValue("period", "statementPeriod", "statement period").orEmpty(),
                 transactions = transactions
             )
         } catch (e: Exception) {
             Log.e("AiCoreService", "Bank statement extraction error", e)
             null
         }
+    }
+
+    private suspend fun getAvailableModel(): GenerativeModel? {
+        val candidates = listOf(
+            "preview_full" to previewFullModel,
+            "preview_fast" to previewFastModel,
+            "stable_default" to stableModel
+        )
+
+        for ((name, model) in candidates) {
+            val status = try {
+                model.checkStatus()
+            } catch (e: Exception) {
+                Log.w("AiCoreService", "Model status check failed for $name", e)
+                continue
+            }
+
+            if (status == FeatureStatus.AVAILABLE) {
+                val baseModelName = try {
+                    model.getBaseModelName()
+                } catch (_: Exception) {
+                    name
+                }
+                Log.d("AiCoreService", "Using AICore model: $name ($baseModelName)")
+                return model
+            }
+
+            Log.d("AiCoreService", "AICore model $name not available. Status=$status")
+        }
+
+        Log.w("AiCoreService", "No AICore model is available")
+        return null
     }
 
     /**
@@ -400,6 +425,10 @@ class AiCoreService(
     }
 
     private fun parseFirstJsonObject(text: String): JsonObject? {
+        return parseFirstJsonElement(text)?.let { firstJsonObject(it) }
+    }
+
+    private fun parseFirstJsonElement(text: String): JsonElement? {
         val cleaned = text
             .replace("```json", "")
             .replace("```", "")
@@ -413,11 +442,11 @@ class AiCoreService(
 
         for (candidate in candidates) {
             try {
-                firstJsonObject(json.parseToJsonElement(candidate))?.let { return it }
+                return json.parseToJsonElement(candidate)
             } catch (_: Exception) { }
         }
 
-        Log.w("AiCoreService", "Unable to parse income JSON: $text")
+        Log.w("AiCoreService", "Unable to parse JSON: $text")
         return null
     }
 
@@ -437,6 +466,36 @@ class AiCoreService(
 
     private fun JsonObject.stringValue(vararg keys: String): String {
         return findValue(*keys)?.jsonPrimitive?.contentOrNull?.trim().orEmpty()
+    }
+
+    private fun JsonObject.arrayValue(vararg keys: String): JsonArray? {
+        return findValue(*keys) as? JsonArray
+    }
+
+    private fun JsonObject.toBankTransaction(): BankTransaction {
+        val type = stringValue("type", "transactionType", "transaction type", "drCr", "debitCredit")
+        val credit = amountTextValue("creditText", "credit text") ?: amountValue("credit", "moneyIn", "money in")
+        val debit = amountTextValue("debitText", "debit text") ?: amountValue("debit", "moneyOut", "money out")
+        val amountFromText = amountTextValue("amountText", "amount text", "rawAmount", "raw amount")
+        val amountFromNumber = amountValue("amount", "transactionAmount", "transaction amount", "value")
+        val signedAmount = when {
+            credit != null && credit > 0.0 -> credit
+            debit != null && debit > 0.0 -> -debit
+            else -> amountFromText ?: amountFromNumber ?: 0.0
+        }
+        val normalizedType = when {
+            type.contains("credit", ignoreCase = true) || type.equals("cr", ignoreCase = true) -> "credit"
+            type.contains("debit", ignoreCase = true) || type.equals("dr", ignoreCase = true) -> "debit"
+            signedAmount >= 0.0 -> "credit"
+            else -> "debit"
+        }
+
+        return BankTransaction(
+            date = stringValue("date", "transactionDate", "transaction date", "postingDate", "valueDate"),
+            description = stringValue("description", "details", "narration", "reference", "particulars"),
+            amount = if (normalizedType == "credit") kotlin.math.abs(signedAmount) else -kotlin.math.abs(signedAmount),
+            type = normalizedType
+        )
     }
 
     private fun JsonObject.amountValue(vararg keys: String): Double? {
