@@ -1,6 +1,5 @@
 plugins {
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
     id("com.google.devtools.ksp")
     id("org.jetbrains.kotlin.plugin.serialization")
@@ -38,10 +37,6 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = "17"
-    }
-
     buildFeatures {
         compose = true
     }
@@ -50,6 +45,12 @@ android {
         resources {
             excludes += setOf("META-INF/AL2.0", "META-INF/LGPL2.1")
         }
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
     }
 }
 
@@ -105,8 +106,8 @@ dependencies {
     // ML Kit (text recognition as fallback when AICore is unavailable)
     implementation("com.google.mlkit:text-recognition:16.0.1")
 
-    // AICore (Google's on-device AI with Gemma)
-    implementation("com.google.ai.client.generativeai:generativeai:0.9.0")
+    // AICore (Google's on-device AI with Gemini Nano via ML Kit)
+    implementation("com.google.mlkit:genai-prompt:1.0.0-beta2")
 
     // Debug
     debugImplementation("androidx.compose.ui:ui-tooling")

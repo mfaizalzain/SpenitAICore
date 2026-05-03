@@ -11,6 +11,6 @@
 -dontnote kotlinx.serialization.AnnotationsKt
 -keepclassmembers class kotlinx.serialization.json.** { *** Companion; }
 -keepclasseswithmembers class kotlinx.serialization.json.** { kotlinx.serialization.KSerializer serializer(...); }
--keep,includedescriptorclasses class com.fmz.spenit.**$$serializer { *; }
--keepclassmembers class com.fmz.spenit.** { *** Companion; }
--keepclasseswithmembers class com.fmz.spenit.** { kotlinx.serialization.KSerializer serializer(...); }
+-keep,includedescriptorclasses class com.fmz.spenitaicore.**$$serializer { *; }
+-keepclassmembers class com.fmz.spenitaicore.** { *** Companion; }
+-keepclasseswithmembers class com.fmz.spenitaicore.** { kotlinx.serialization.KSerializer serializer(...); }
