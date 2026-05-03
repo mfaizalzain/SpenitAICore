@@ -1,5 +1,6 @@
 package com.fmz.spenitaicore.ui.sharedimports
 
+import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
@@ -12,6 +13,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -19,22 +21,41 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.fmz.spenitaicore.data.db.entity.SharedImportItem
 import com.fmz.spenitaicore.data.db.entity.SharedImportKind
 import com.fmz.spenitaicore.data.db.entity.SharedImportStatus
+import com.fmz.spenitaicore.ui.components.CompactTopAppBar
 import com.fmz.spenitaicore.viewmodel.SharedImportsViewModel
+import androidx.compose.ui.graphics.Color
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SharedImportsScreen(
     viewModel: SharedImportsViewModel,
+    pendingImportSignal: Int = 0,
     onNavigateBack: () -> Unit
 ) {
     val imports by viewModel.imports.collectAsStateWithLifecycle()
     val pendingCount by viewModel.pendingCount.collectAsStateWithLifecycle()
     val isBusy by viewModel.isBusy.collectAsStateWithLifecycle()
+    val unclassifiedCount = imports.count { it.kind == SharedImportKind.Unknown }
+    val context = LocalContext.current
+
+    LaunchedEffect(pendingImportSignal) {
+        if (pendingImportSignal > 0) {
+            viewModel.drainPendingFiles()
+        }
+    }
 
     val filePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetMultipleContents()
+        contract = ActivityResultContracts.OpenMultipleDocuments()
     ) { uris ->
         if (uris.isNotEmpty()) {
+            uris.forEach { uri ->
+                try {
+                    context.contentResolver.takePersistableUriPermission(
+                        uri,
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    )
+                } catch (_: Exception) { }
+            }
             val paths = uris.map { it.toString() }
             val names = uris.map { it.lastPathSegment ?: "unknown" }
             viewModel.addFiles(paths, names)
@@ -43,7 +64,7 @@ fun SharedImportsScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
+            CompactTopAppBar(
                 title = { Text("Shared Imports") },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
@@ -69,7 +90,7 @@ fun SharedImportsScreen(
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp),
+                    .padding(horizontal = 16.dp, vertical = 6.dp),
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.primaryContainer
                 )
@@ -77,7 +98,7 @@ fun SharedImportsScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp),
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -87,11 +108,44 @@ fun SharedImportsScreen(
                         fontWeight = FontWeight.Medium
                     )
                     FilledTonalButton(
-                        onClick = { filePickerLauncher.launch("image/*") }
+                        onClick = { filePickerLauncher.launch(arrayOf("image/*", "application/pdf", "text/csv")) }
                     ) {
                         Icon(Icons.Filled.Add, null, Modifier.size(18.dp))
                         Spacer(Modifier.width(4.dp))
                         Text("Add Files")
+                    }
+                }
+            }
+
+            // Warning banner for unclassified files
+            if (unclassifiedCount > 0) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                        .padding(bottom = 2.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = Color(0xFFFFF3E0)
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Filled.Warning,
+                            contentDescription = null,
+                            tint = Color(0xFFE65100),
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            "$unclassifiedCount file(s) need a type selected — tap \"Choose Type\" on each file",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFFBF360C)
+                        )
                     }
                 }
             }

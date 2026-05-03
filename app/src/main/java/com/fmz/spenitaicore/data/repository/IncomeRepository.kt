@@ -13,7 +13,11 @@ class IncomeRepository(
     fun getIncomeEntriesFrom(from: String): Flow<List<IncomeEntry>> = incomeEntryDao.getIncomeEntriesFrom(from)
 
     suspend fun getIncomeEntriesFromSync(from: String?): List<IncomeEntry> =
-        incomeEntryDao.getIncomeEntriesFromSync(from)
+        if (from == null) {
+            incomeEntryDao.getAllIncomeEntriesSync()
+        } else {
+            incomeEntryDao.getIncomeEntriesFromSync(from)
+        }
 
     suspend fun getIncomeEntryById(id: Int): IncomeEntry? = incomeEntryDao.getIncomeEntryById(id)
 

@@ -2,24 +2,31 @@ package com.fmz.spenitaicore.ai
 
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.pdf.PdfRenderer
 import android.net.Uri
+import android.os.ParcelFileDescriptor
 import android.util.Log
+import com.fmz.spenitaicore.data.db.entity.IncomeSources
 import com.fmz.spenitaicore.data.preferences.AppPreferences
 import com.fmz.spenitaicore.data.repository.ReceiptRepository
+import com.fmz.spenitaicore.util.DateUtils
 import com.fmz.spenitaicore.viewmodel.ExpensesViewModel
 import com.google.mlkit.genai.prompt.Generation
 import com.google.mlkit.genai.prompt.GenerateContentRequest
 import com.google.mlkit.genai.prompt.TextPart
-import com.google.mlkit.genai.prompt.Candidate
+import com.google.mlkit.genai.prompt.ImagePart
 import com.google.mlkit.genai.common.FeatureStatus
-import com.google.mlkit.vision.common.InputImage
-import com.google.mlkit.vision.text.TextRecognition
-import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.doubleOrNull
@@ -52,93 +59,94 @@ class AiCoreService(
 
     private val json = Json { ignoreUnknownKeys = true }
 
+    suspend fun classifyFinancialDocument(imagePath: String): FinancialDocumentType {
+        Log.d("AiCoreService", "Starting document classification for: $imagePath")
+        val lowerPath = imagePath.lowercase()
+        if (lowerPath.endsWith(".csv")) return FinancialDocumentType.BankStatement
+
+        return try {
+            val bitmap = loadBitmapFromPath(imagePath) ?: return FinancialDocumentType.Unknown
+            val status = generativeModel.checkStatus()
+            if (status != FeatureStatus.AVAILABLE) {
+                Log.w("AiCoreService", "Model not available. Status=$status")
+                return FinancialDocumentType.Unknown
+            }
+
+            val prompt = """
+                Classify this financial document into exactly one type:
+                - income: payslip, salary slip, wage statement, employer payment advice, income proof
+                - expense: receipt, invoice, bill, purchase receipt, tax receipt
+                - bank_statement: bank account statement or transaction list with multiple credits/debits/balances
+
+                Choose bank_statement when the document shows account balances, transaction rows, debit/credit columns, or statement period.
+                Choose income only when it is primarily a payslip/income document, not a general bank statement.
+                Choose expense only when it is primarily a merchant receipt/invoice/bill.
+
+                Return ONLY JSON:
+                {"type":"income"}
+            """.trimIndent()
+
+            val request = GenerateContentRequest.Builder(
+                ImagePart(bitmap),
+                TextPart(prompt)
+            ).build()
+
+            val response = generativeModel.generateContent(request)
+            val jsonStr = response.candidates.firstOrNull()?.text?.trim()
+                ?: return FinancialDocumentType.Unknown
+            val jsonObj = parseFirstJsonObject(jsonStr) ?: return FinancialDocumentType.Unknown
+            when (jsonObj.stringValue("type", "documentType", "document_type").normalizedDocumentType()) {
+                "income" -> FinancialDocumentType.Income
+                "expense" -> FinancialDocumentType.Expense
+                "bankstatement" -> FinancialDocumentType.BankStatement
+                else -> FinancialDocumentType.Unknown
+            }
+        } catch (e: Exception) {
+            Log.e("AiCoreService", "Document classification error", e)
+            FinancialDocumentType.Unknown
+        }
+    }
+
     suspend fun extractReceiptData(
         imagePath: String,
         currency: String
     ): OcrResult? {
         Log.d("AiCoreService", "Starting receipt extraction for: $imagePath")
         return try {
-            val ocrText = runMlKitOcr(imagePath) ?: run {
-                Log.e("AiCoreService", "OCR failed to extract text from image")
+            val bitmap = loadBitmapFromPath(imagePath) ?: return null
+            val status = generativeModel.checkStatus()
+            if (status != FeatureStatus.AVAILABLE) {
+                Log.w("AiCoreService", "Model not available. Status=$status")
                 return null
             }
-            Log.d("AiCoreService", "OCR Text extracted: ${ocrText.take(100)}...")
-            
+
             val prompt = """
-                Extract receipt information from the following OCR text.
-                It is CRITICAL that you identify the:
-                1. Merchant Name (the business name)
-                2. Date (in YYYY-MM-DD format)
-                3. Total Amount (as a decimal number)
-                4. Category (MUST be one of: ${ExpensesViewModel.SPENDING_CATEGORIES.joinToString(", ")})
-                
-                Return ONLY a JSON object with these keys:
-                - "merchant": name of the store or provider
-                - "date": date in YYYY-MM-DD format
-                - "total": total amount as a number
-                - "currency": currency code or symbol (use "$currency" as default)
-                - "category": the chosen category from the list above
-                - "taxAmount": total tax or VAT amount as a number
-                - "items": an array of objects with "description", "quantity", "unitPrice", "total"
-                
-                OCR TEXT:
-                $ocrText
+                Extract from this receipt: merchant, date (YYYY-MM-DD), total, tax, category from [${ExpensesViewModel.SPENDING_CATEGORIES.joinToString(", ")}].
+                Return ONLY: {"merchant":"...","date":"...","total":0.0,"currency":"$currency","category":"General","taxAmount":0.0}
             """.trimIndent()
 
-            Log.d("AiCoreService", "Checking model status...")
-            val status = generativeModel.checkStatus()
-            val statusName = when (status) {
-                FeatureStatus.AVAILABLE -> "AVAILABLE"
-                FeatureStatus.DOWNLOADABLE -> "DOWNLOADABLE"
-                FeatureStatus.DOWNLOADING -> "DOWNLOADING"
-                else -> "UNAVAILABLE"
-            }
-            Log.d("AiCoreService", "Model status: $statusName ($status)")
+            val request = GenerateContentRequest.Builder(
+                ImagePart(bitmap),
+                TextPart(prompt)
+            ).build()
 
-            if (status != FeatureStatus.AVAILABLE) {
-                Log.w("AiCoreService", "Model not available. Current status: $status")
-                if (status == FeatureStatus.DOWNLOADABLE) {
-                    Log.i("AiCoreService", "Model is downloadable. Starting download...")
-                    generativeModel.download().collect { downloadProgress ->
-                        Log.d("AiCoreService", "Download progress: $downloadProgress")
-                    }
-                    Log.i("AiCoreService", "Download process finished. Please try again once status is AVAILABLE.")
-                } else if (status == FeatureStatus.DOWNLOADING) {
-                    Log.i("AiCoreService", "Model is currently downloading...")
-                } else {
-                    Log.e("AiCoreService", "Model is UNAVAILABLE on this device.")
-                }
-                return null
-            }
-            
-            val request = GenerateContentRequest.Builder(TextPart(prompt))
-                .build()
-
-            Log.d("AiCoreService", "Generating content with Gemini Nano...")
             val response = generativeModel.generateContent(request)
-            Log.d("AiCoreService", "Response received")
-
             val jsonStr = response.candidates.firstOrNull()?.text
-                ?.replace("```json", "")?.replace("```", "")?.trim() ?: run {
-                    Log.e("AiCoreService", "No text found in AI response")
-                    return null
-                }
-            
-            Log.d("AiCoreService", "Raw JSON from AI: $jsonStr")
-            
+                ?.replace("```json", "")?.replace("```", "")?.trim()
+                ?: return null
+
+            Log.d("AiCoreService", "Receipt JSON: $jsonStr")
             val jsonObj = json.parseToJsonElement(jsonStr).jsonObject
-            
-            val items = jsonObj["items"]?.jsonArray?.map { 
-                val itemObj = it.jsonObject
+
+            val items = jsonObj["items"]?.jsonArray?.map {
+                val i = it.jsonObject
                 OcrLineItem(
-                    description = itemObj["description"]?.jsonPrimitive?.content ?: "",
-                    quantity = itemObj["quantity"]?.jsonPrimitive?.doubleOrNull ?: 1.0,
-                    unitPrice = itemObj["unitPrice"]?.jsonPrimitive?.doubleOrNull ?: 0.0,
-                    total = itemObj["total"]?.jsonPrimitive?.doubleOrNull ?: 0.0
+                    description = i["description"]?.jsonPrimitive?.content ?: "",
+                    quantity = i["quantity"]?.jsonPrimitive?.doubleOrNull ?: 1.0,
+                    unitPrice = i["unitPrice"]?.jsonPrimitive?.doubleOrNull ?: 0.0,
+                    total = i["total"]?.jsonPrimitive?.doubleOrNull ?: 0.0
                 )
             } ?: emptyList()
-
-            Log.d("AiCoreService", "Successfully parsed result for: ${jsonObj["merchant"]?.jsonPrimitive?.content}")
 
             OcrResult(
                 merchant = jsonObj["merchant"]?.jsonPrimitive?.content ?: "Unknown",
@@ -148,54 +156,342 @@ class AiCoreService(
                 currency = jsonObj["currency"]?.jsonPrimitive?.content ?: currency,
                 category = jsonObj["category"]?.jsonPrimitive?.content ?: "General",
                 items = items,
-                rawText = ocrText,
+                rawText = "",
                 confidence = 0.9
             )
         } catch (e: Exception) {
-            Log.e("AiCoreService", "Error during extraction", e)
+            Log.e("AiCoreService", "Receipt extraction error", e)
             null
         }
     }
 
-    suspend fun extractPaySlipData(
+    suspend fun extractIncomeData(
         imagePath: String,
         currency: String
     ): PaySlipResult? {
+        Log.d("AiCoreService", "Starting income extraction for: $imagePath")
         return try {
-            val ocrText = runMlKitOcr(imagePath)
-            if (ocrText != null) {
-                parsePaySlipText(ocrText, currency)
-            } else null
+            val bitmap = loadBitmapFromPath(imagePath) ?: return null
+            val status = generativeModel.checkStatus()
+            if (status != FeatureStatus.AVAILABLE) {
+                Log.w("AiCoreService", "Model not available. Status=$status")
+                return null
+            }
+
+            val prompt = """
+                Read this income document. It can be a pay slip or a bank statement.
+
+                Return exactly one income entry as JSON only:
+                {"employer":"...","netPay":0.0,"netPayText":"...","date":"YYYY-MM-DD","category":"Salary","notes":"..."}
+
+                Amount rules:
+                - Pay slip: use net pay, take-home pay, amount paid, or paid to employee. If there is no net pay, use gross pay.
+                - Bank statement: use the amount from one credit/deposit/money-in transaction row. Use the transaction amount, not the running balance, opening balance, closing balance, available balance, total credits, or total debits.
+                - Prefer rows/descriptions containing salary, payroll, wages, commission, bonus, dividend, interest, rental, refund, freelance, or business income.
+                - The returned netPay must be positive. Return 0.0 only when no income amount is visible at all.
+                - netPayText must copy the full visible amount exactly, including all digits and separators. For example, if the document shows 10,412.51, return netPayText "10,412.51" and netPay 10412.51. Do not shorten it to 10.41.
+
+                Category must be one of: ${IncomeSources.All.joinToString(", ")}.
+                Use today's date "${DateUtils.today()}" only if the document date cannot be read.
+            """.trimIndent()
+
+            val request = GenerateContentRequest.Builder(
+                ImagePart(bitmap),
+                TextPart(prompt)
+            ).build()
+
+            val response = generativeModel.generateContent(request)
+            val jsonStr = response.candidates.firstOrNull()?.text
+                ?.replace("```json", "")?.replace("```", "")?.trim()
+                ?: return null
+
+            Log.d("AiCoreService", "Income JSON: $jsonStr")
+            val jsonObj = parseFirstJsonObject(jsonStr) ?: return null
+
+            val employer = jsonObj.stringValue("employer", "source", "payer", "company", "description")
+            val netPayFromText = jsonObj.amountTextValue(
+                "netPayText",
+                "net pay text",
+                "amountText",
+                "amount text",
+                "rawAmount",
+                "raw amount"
+            )
+            val netPayFromNumber = jsonObj.amountValue(
+                "netPay",
+                "net_pay",
+                "net pay",
+                "takeHomePay",
+                "take home pay",
+                "amount paid",
+                "paid to employee",
+                "transactionAmount",
+                "transaction amount",
+                "creditAmount",
+                "credit amount",
+                "depositAmount",
+                "deposit amount",
+                "amount",
+                "credit"
+            )?.let { kotlin.math.abs(it) }
+            val netPay = netPayFromText ?: netPayFromNumber ?: 0.0
+            val date = jsonObj.stringValue("date", "transactionDate", "transaction date", "payDate", "pay date")
+                .ifBlank { DateUtils.today() }
+            val category = jsonObj.stringValue("category", "incomeCategory", "income category").ifBlank { "Salary" }
+            val notes = jsonObj.stringValue("notes", "note", "reason").ifBlank { null }
+
+            Log.d("AiCoreService", "Income result: employer=$employer netPay=$netPay date=$date category=$category")
+            PaySlipResult(employer = employer, netPay = netPay, date = date, category = category, notes = notes)
         } catch (e: Exception) {
+            Log.e("AiCoreService", "Income extraction error", e)
             null
         }
     }
 
-    private suspend fun runMlKitOcr(imagePath: String): String? {
+    suspend fun extractBankStatementData(
+        imagePath: String,
+        currency: String
+    ): BankStatementResult? {
+        Log.d("AiCoreService", "Starting bank statement extraction for: $imagePath")
+        return try {
+            val bitmap = loadBitmapFromPath(imagePath) ?: return null
+            val status = generativeModel.checkStatus()
+            if (status != FeatureStatus.AVAILABLE) {
+                Log.w("AiCoreService", "Model not available. Status=$status")
+                return null
+            }
+
+            val prompt = """
+                Look at this bank statement image. Extract ALL transactions visible.
+                For each transaction, extract: date (YYYY-MM-DD), description, amount (positive for credit/income, negative for debit/expense), amountText (the exact visible amount), and type ("credit" or "debit").
+                Also extract: bank name, account number (last 4 digits only), statement period.
+                Do not use running balance, opening balance, closing balance, or available balance as the transaction amount.
+                Return ONLY JSON: {"bankName":"...","accountLast4":"...","period":"...","transactions":[{"date":"YYYY-MM-DD","description":"...","amount":0.0,"amountText":"...","type":"debit"}]}
+            """.trimIndent()
+
+            val request = GenerateContentRequest.Builder(
+                ImagePart(bitmap),
+                TextPart(prompt)
+            ).build()
+
+            val response = generativeModel.generateContent(request)
+            val jsonStr = response.candidates.firstOrNull()?.text
+                ?.replace("```json", "")?.replace("```", "")?.trim()
+                ?: return null
+
+            Log.d("AiCoreService", "Bank statement JSON: ${jsonStr.take(200)}...")
+            val jsonObj = parseFirstJsonObject(jsonStr) ?: return null
+
+            val transactions = jsonObj["transactions"]?.jsonArray?.map {
+                val t = it.jsonObject
+                val type = t.stringValue("type", "transactionType", "transaction type")
+                val amountFromText = t.amountTextValue("amountText", "amount text", "rawAmount", "raw amount")
+                val amountFromNumber = t.amountValue(
+                    "amount",
+                    "transactionAmount",
+                    "transaction amount",
+                    "credit",
+                    "debit",
+                    "moneyIn",
+                    "money in",
+                    "moneyOut",
+                    "money out"
+                )
+                val signedAmount = amountFromText ?: amountFromNumber ?: 0.0
+                val normalizedType = when {
+                    type.equals("credit", ignoreCase = true) -> "credit"
+                    type.equals("debit", ignoreCase = true) -> "debit"
+                    signedAmount >= 0.0 -> "credit"
+                    else -> "debit"
+                }
+                BankTransaction(
+                    date = t.stringValue("date", "transactionDate", "transaction date"),
+                    description = t.stringValue("description", "details", "narration", "reference"),
+                    amount = if (normalizedType == "credit") kotlin.math.abs(signedAmount) else -kotlin.math.abs(signedAmount),
+                    type = normalizedType
+                )
+            } ?: emptyList()
+
+            BankStatementResult(
+                bankName = jsonObj.stringValue("bankName", "bank name", "bank"),
+                accountLast4 = jsonObj.stringValue("accountLast4", "account last 4", "accountNumber", "account number"),
+                period = jsonObj.stringValue("period", "statementPeriod", "statement period"),
+                transactions = transactions
+            )
+        } catch (e: Exception) {
+            Log.e("AiCoreService", "Bank statement extraction error", e)
+            null
+        }
+    }
+
+    /**
+     * Loads a bitmap from an image path. Handles JPEG/PNG images and PDFs
+     * (renders first page as bitmap).
+     */
+    private suspend fun loadBitmapFromPath(imagePath: String): Bitmap? {
         return withContext(Dispatchers.IO) {
             try {
-                val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
-
-                val bitmap = try {
-                    if (imagePath.startsWith("content://") || imagePath.startsWith("file://")) {
-                        val uri = Uri.parse(imagePath)
-                        val inputStream = context.contentResolver.openInputStream(uri)
-                        BitmapFactory.decodeStream(inputStream)
-                    } else {
-                        BitmapFactory.decodeFile(imagePath)
-                    }
-                } catch (e: Exception) {
-                    BitmapFactory.decodeFile(imagePath)
+                if (isPdfInput(imagePath)) {
+                    loadPdfAsBitmap(imagePath)
+                } else {
+                    loadImageBitmap(imagePath)
                 }
-
-                if (bitmap == null) return@withContext null
-
-                val inputImage = InputImage.fromBitmap(bitmap, 0)
-                val visionText = recognizer.process(inputImage).await()
-                visionText.text
             } catch (e: Exception) {
+                Log.e("AiCoreService", "Failed to load bitmap", e)
                 null
             }
+        }
+    }
+
+    private fun loadImageBitmap(imagePath: String): Bitmap? {
+        return try {
+            if (imagePath.startsWith("content://") || imagePath.startsWith("file://")) {
+                val uri = Uri.parse(imagePath)
+                context.contentResolver.openInputStream(uri)?.use {
+                    BitmapFactory.decodeStream(it)
+                }
+            } else {
+                BitmapFactory.decodeFile(imagePath)
+            }
+        } catch (e: Exception) {
+            BitmapFactory.decodeFile(imagePath)
+        }
+    }
+
+    private fun loadPdfAsBitmap(pdfPath: String): Bitmap? {
+        return try {
+            val fd: ParcelFileDescriptor = if (pdfPath.startsWith("content://")) {
+                context.contentResolver.openFileDescriptor(Uri.parse(pdfPath), "r") ?: return null
+            } else if (pdfPath.startsWith("file://")) {
+                val filePath = Uri.parse(pdfPath).path ?: return null
+                ParcelFileDescriptor.open(java.io.File(filePath), ParcelFileDescriptor.MODE_READ_ONLY)
+            } else {
+                ParcelFileDescriptor.open(java.io.File(pdfPath), ParcelFileDescriptor.MODE_READ_ONLY)
+            }
+            val renderer = PdfRenderer(fd)
+            val page = renderer.openPage(0)
+            val maxPageDimension = maxOf(page.width, page.height).coerceAtLeast(1)
+            val scale = (2400f / maxPageDimension).coerceIn(1f, 3f)
+            val width = (page.width * scale).toInt().coerceAtLeast(1)
+            val height = (page.height * scale).toInt().coerceAtLeast(1)
+            val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+            Canvas(bitmap).drawColor(Color.WHITE)
+            page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+            page.close()
+            renderer.close()
+            fd.close()
+            bitmap
+        } catch (e: Exception) {
+            Log.e("AiCoreService", "PDF render error", e)
+            null
+        }
+    }
+
+    private fun isPdfInput(path: String): Boolean {
+        val lowerPath = path.lowercase()
+        if (lowerPath.endsWith(".pdf")) return true
+        if (!path.startsWith("content://")) return false
+
+        return try {
+            context.contentResolver.getType(Uri.parse(path)) == "application/pdf"
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun parseFirstJsonObject(text: String): JsonObject? {
+        val cleaned = text
+            .replace("```json", "")
+            .replace("```", "")
+            .trim()
+
+        val candidates = listOfNotNull(
+            cleaned,
+            cleaned.substringOrNull('{', '}'),
+            cleaned.substringOrNull('[', ']')
+        ).distinct()
+
+        for (candidate in candidates) {
+            try {
+                firstJsonObject(json.parseToJsonElement(candidate))?.let { return it }
+            } catch (_: Exception) { }
+        }
+
+        Log.w("AiCoreService", "Unable to parse income JSON: $text")
+        return null
+    }
+
+    private fun String.substringOrNull(startChar: Char, endChar: Char): String? {
+        val start = indexOf(startChar)
+        val end = lastIndexOf(endChar)
+        return if (start >= 0 && end > start) substring(start, end + 1) else null
+    }
+
+    private fun firstJsonObject(element: JsonElement): JsonObject? {
+        return when (element) {
+            is JsonObject -> element
+            is JsonArray -> element.firstOrNull() as? JsonObject
+            else -> null
+        }
+    }
+
+    private fun JsonObject.stringValue(vararg keys: String): String {
+        return findValue(*keys)?.jsonPrimitive?.contentOrNull?.trim().orEmpty()
+    }
+
+    private fun JsonObject.amountValue(vararg keys: String): Double? {
+        val primitive = findValue(*keys)?.jsonPrimitive ?: return null
+        return primitive.doubleOrNull
+            ?: primitive.contentOrNull?.parseVisibleAmount()
+    }
+
+    private fun JsonObject.amountTextValue(vararg keys: String): Double? {
+        return findValue(*keys)?.jsonPrimitive?.contentOrNull?.parseVisibleAmount()
+    }
+
+    private fun String.parseVisibleAmount(): Double? {
+        val amountText = replace(Regex("[^0-9,\\.\\-]"), "")
+            .trim(',', '.')
+            .ifBlank { return null }
+
+        val lastComma = amountText.lastIndexOf(',')
+        val lastDot = amountText.lastIndexOf('.')
+        val normalized = when {
+            lastComma >= 0 && lastDot >= 0 && lastComma > lastDot -> {
+                amountText.replace(".", "").replace(",", ".")
+            }
+            lastComma >= 0 && lastDot >= 0 -> {
+                amountText.replace(",", "")
+            }
+            lastComma >= 0 && amountText.length - lastComma - 1 == 2 -> {
+                amountText.replace(",", ".")
+            }
+            else -> amountText.replace(",", "")
+        }
+
+        return normalized.toDoubleOrNull()?.let { kotlin.math.abs(it) }
+    }
+
+    private fun JsonObject.findValue(vararg keys: String): JsonElement? {
+        for (key in keys) {
+            this[key]?.let { return it }
+        }
+
+        val normalizedKeys = keys.map { it.normalizedJsonKey() }.toSet()
+        return entries.firstOrNull { it.key.normalizedJsonKey() in normalizedKeys }?.value
+    }
+
+    private fun String.normalizedJsonKey(): String {
+        return lowercase().replace(Regex("[^a-z0-9]"), "")
+    }
+
+    private fun String.normalizedDocumentType(): String {
+        val normalized = normalizedJsonKey()
+        return when (normalized) {
+            "bank", "bankstatement", "statement", "banktransaction", "transactionlist" -> "bankstatement"
+            "receipt", "expense", "invoice", "bill" -> "expense"
+            "income", "payslip", "salaryslip", "salary", "paystub", "wagestatement" -> "income"
+            else -> normalized
         }
     }
 
@@ -281,39 +577,4 @@ class AiCoreService(
         )
     }
 
-    private fun parsePaySlipText(text: String, currency: String): PaySlipResult {
-        val lines = text.lines().map { it.trim() }.filter { it.isNotEmpty() }
-        val employer = lines.firstOrNull() ?: "Employer"
-
-        val amountPattern = Regex("""(?:RM|MYR|USD|SGD|\$|Rp|€|£|¥)?\s*(\d+[.,]?\d{0,2})\s*$""")
-        var netPay = 0.0
-
-        for (line in lines) {
-            val match = amountPattern.find(line)
-            if (match != null) {
-                val amount = match.groupValues[1].replace(",", "").toDoubleOrNull() ?: 0.0
-                if (amount > netPay) {
-                    netPay = amount
-                }
-            }
-        }
-
-        val datePattern = Regex("""(\d{2})[/-](\d{2})[/-](\d{2,4})""")
-        var dateStr = ""
-        for (line in lines) {
-            val dm = datePattern.find(line)
-            if (dm != null) {
-                val (d, m, y) = dm.destructured
-                val year = if (y.length == 2) "20$y" else y
-                dateStr = "$year-${m.padStart(2, '0')}-${d.padStart(2, '0')}"
-                break
-            }
-        }
-
-        return PaySlipResult(
-            employer = employer,
-            netPay = netPay,
-            date = dateStr
-        )
-    }
 }

@@ -13,19 +13,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.fmz.spenitaicore.ui.components.CompactTopAppBar
 import com.fmz.spenitaicore.viewmodel.SettingsViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(viewModel: SettingsViewModel) {
     val selectedCurrency by viewModel.selectedCurrencyCode.collectAsStateWithLifecycle()
-    val selectedLanguage by viewModel.selectedLanguageCode.collectAsStateWithLifecycle()
     val salaryPayDay by viewModel.salaryPayDay.collectAsStateWithLifecycle()
     val isAppLockEnabled by viewModel.isAppLockEnabled.collectAsStateWithLifecycle()
     val isBusy by viewModel.isBusy.collectAsStateWithLifecycle()
 
     var showCurrencyDropdown by remember { mutableStateOf(false) }
-    var showLanguageDropdown by remember { mutableStateOf(false) }
     var showPayDayDropdown by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
@@ -34,7 +33,7 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
 
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text("Settings") })
+            CompactTopAppBar(title = { Text("Settings") })
         }
     ) { padding ->
         LazyColumn(
@@ -69,30 +68,6 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
                                 onClick = {
                                     viewModel.setCurrency(code)
                                     showCurrencyDropdown = false
-                                }
-                            )
-                        }
-                    }
-                }
-            }
-
-            // Language
-            item {
-                Box {
-                    SettingsItem(
-                        title = "Language",
-                        subtitle = viewModel.availableLanguages.find { it.first == selectedLanguage }?.second ?: "English",
-                        icon = Icons.Outlined.Language,
-                        onClick = { showLanguageDropdown = true }
-                    )
-                    DropdownMenu(expanded = showLanguageDropdown,
-                        onDismissRequest = { showLanguageDropdown = false }) {
-                        viewModel.availableLanguages.forEach { (code, name) ->
-                            DropdownMenuItem(
-                                text = { Text(name) },
-                                onClick = {
-                                    viewModel.setLanguage(code)
-                                    showLanguageDropdown = false
                                 }
                             )
                         }

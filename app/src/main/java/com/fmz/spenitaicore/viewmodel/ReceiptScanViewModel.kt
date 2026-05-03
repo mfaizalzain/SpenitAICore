@@ -1,6 +1,7 @@
 package com.fmz.spenitaicore.viewmodel
 
 import android.net.Uri
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fmz.spenitaicore.SpenItApp
@@ -13,10 +14,13 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.serializer
 
-class ReceiptScanViewModel : ViewModel() {
+class ReceiptScanViewModel(
+    private val isIncome: Boolean = false
+) : ViewModel() {
 
     private val container = SpenItApp.instance.container
     private val receiptRepo = container.receiptRepository
+    private val incomeRepo = container.incomeRepository
     private val preferences = container.preferences
     private val aiCore = container.aiCoreService
 
@@ -93,21 +97,50 @@ class ReceiptScanViewModel : ViewModel() {
             _isProcessing.value = true
             _isBusy.value = true
             try {
-                val result = aiCore.extractReceiptData(path, _currency.value)
-                if (result != null) {
-                    if (result.merchant.isNotBlank()) _merchant.value = result.merchant
-                    if (result.total > 0) _total.value = result.total
-                    if (result.taxAmount > 0) _taxAmount.value = result.taxAmount
-                    if (result.category.isNotBlank() && _category.value == "General") _category.value = result.category
-                    if (!result.notes.isNullOrBlank() && _notes.value.isNullOrBlank()) _notes.value = result.notes
-                    if (result.items.isNotEmpty()) {
-                        _items.value = result.items.map { item ->
-                            ReceiptItem(
-                                description = item.description,
-                                quantity = item.quantity,
-                                unitPrice = item.unitPrice,
-                                total = item.total
-                            )
+                Log.d("ReceiptScanVM", "extractReceiptData: isIncome=$isIncome, path=$path")
+                if (isIncome) {
+                    // Extract payslip / income data
+                    val result = aiCore.extractIncomeData(path, _currency.value)
+                    Log.d("ReceiptScanVM", "extractIncomeData result: $result")
+                    if (result != null) {
+                        if (result.employer.isNotBlank()) {
+                            _merchant.value = result.employer
+                            Log.d("ReceiptScanVM", "Set employer: ${result.employer}")
+                        }
+                        if (result.netPay > 0) {
+                            _total.value = result.netPay
+                            Log.d("ReceiptScanVM", "Set netPay: ${result.netPay}")
+                        }
+                        if (result.date.isNotBlank()) {
+                            _date.value = result.date
+                            Log.d("ReceiptScanVM", "Set date: ${result.date}")
+                        }
+                        if (result.category.isNotBlank()) {
+                            _category.value = result.category
+                            Log.d("ReceiptScanVM", "Set category: ${result.category}")
+                        }
+                        if (!result.notes.isNullOrBlank()) _notes.value = result.notes
+                    } else {
+                        Log.w("ReceiptScanVM", "extractIncomeData returned null")
+                    }
+                } else {
+                    // Extract receipt / expense data
+                    val result = aiCore.extractReceiptData(path, _currency.value)
+                    if (result != null) {
+                        if (result.merchant.isNotBlank()) _merchant.value = result.merchant
+                        if (result.total > 0) _total.value = result.total
+                        if (result.taxAmount > 0) _taxAmount.value = result.taxAmount
+                        if (result.category.isNotBlank() && _category.value == "General") _category.value = result.category
+                        if (!result.notes.isNullOrBlank() && _notes.value.isNullOrBlank()) _notes.value = result.notes
+                        if (result.items.isNotEmpty()) {
+                            _items.value = result.items.map { item ->
+                                ReceiptItem(
+                                    description = item.description,
+                                    quantity = item.quantity,
+                                    unitPrice = item.unitPrice,
+                                    total = item.total
+                                )
+                            }
                         }
                     }
                 }
@@ -147,28 +180,42 @@ class ReceiptScanViewModel : ViewModel() {
             if (_merchant.value.isBlank()) return@launch
             _isBusy.value = true
             try {
-                val tags = _tagsInput.value
-                    .split(",", ";")
-                    .map { it.trim() }
-                    .filter { it.isNotEmpty() }
-                val tagsJson = Json.encodeToString(tags)
+                if (isIncome) {
+                    // Save as income entry
+                    val entry = com.fmz.spenitaicore.data.db.entity.IncomeEntry(
+                        source = _merchant.value,
+                        amount = _total.value,
+                        currency = _currency.value,
+                        date = _date.value,
+                        notes = _notes.value?.trim()?.ifBlank { null },
+                        category = _category.value
+                    )
+                    incomeRepo.saveIncomeEntry(entry)
+                } else {
+                    // Save as expense receipt
+                    val tags = _tagsInput.value
+                        .split(",", ";")
+                        .map { it.trim() }
+                        .filter { it.isNotEmpty() }
+                    val tagsJson = Json.encodeToString(tags)
 
-                val receipt = Receipt(
-                    merchant = _merchant.value,
-                    date = _date.value,
-                    total = _total.value,
-                    taxAmount = _taxAmount.value,
-                    currency = _currency.value,
-                    category = _category.value,
-                    imagePath = _imagePath.value,
-                    notes = _notes.value?.trim()?.ifBlank { null },
-                    isTaxDeductible = _isTaxDeductible.value,
-                    taxYear = if (_isTaxDeductible.value) _date.value.substring(0, 4) else null,
-                    taxCategory = if (_isTaxDeductible.value) _taxCategory.value else null,
-                    tagsJson = tagsJson
-                )
+                    val receipt = Receipt(
+                        merchant = _merchant.value,
+                        date = _date.value,
+                        total = _total.value,
+                        taxAmount = _taxAmount.value,
+                        currency = _currency.value,
+                        category = _category.value,
+                        imagePath = _imagePath.value,
+                        notes = _notes.value?.trim()?.ifBlank { null },
+                        isTaxDeductible = _isTaxDeductible.value,
+                        taxYear = if (_isTaxDeductible.value) _date.value.substring(0, 4) else null,
+                        taxCategory = if (_isTaxDeductible.value) _taxCategory.value else null,
+                        tagsJson = tagsJson
+                    )
 
-                receiptRepo.saveReceipt(receipt)
+                    receiptRepo.saveReceipt(receipt)
+                }
             } finally {
                 _isBusy.value = false
             }

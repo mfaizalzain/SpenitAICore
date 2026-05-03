@@ -1,5 +1,6 @@
 package com.fmz.spenitaicore.ui.scan
 
+import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -15,9 +16,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.fmz.spenitaicore.data.db.entity.IncomeSources
+import com.fmz.spenitaicore.ui.components.CompactTopAppBar
+import com.fmz.spenitaicore.ui.components.DatePickerField
 import com.fmz.spenitaicore.viewmodel.ReceiptScanViewModel
 import java.io.File
 
@@ -29,32 +35,55 @@ fun PaySlipScanScreen(
 ) {
     val imagePath by viewModel.imagePath.collectAsStateWithLifecycle()
     val hasImage by viewModel.hasImage.collectAsStateWithLifecycle()
+    val merchant by viewModel.merchant.collectAsStateWithLifecycle()
     val total by viewModel.total.collectAsStateWithLifecycle()
     val date by viewModel.date.collectAsStateWithLifecycle()
+    val category by viewModel.category.collectAsStateWithLifecycle()
     val notes by viewModel.notes.collectAsStateWithLifecycle()
     val isProcessing by viewModel.isProcessing.collectAsStateWithLifecycle()
     val isBusy by viewModel.isBusy.collectAsStateWithLifecycle()
 
     val context = LocalContext.current
-    var photoUri by remember { mutableStateOf<Uri?>(null) }
+    var capturedPhotoUri by remember { mutableStateOf<Uri?>(null) }
+    var showCategoryDropdown by remember { mutableStateOf(false) }
 
     val cameraLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.TakePicture()
     ) { success ->
-        if (success && photoUri != null) {
-            viewModel.setImage(photoUri.toString())
+        if (success && capturedPhotoUri != null) {
+            viewModel.setImage(capturedPhotoUri.toString())
         }
     }
 
-    val imagePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
+    fun launchCamera() {
+        try {
+            val file = File(context.cacheDir, "payslip_${System.currentTimeMillis()}.jpg")
+            file.createNewFile()
+            val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+            capturedPhotoUri = uri
+            cameraLauncher.launch(uri)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    val documentPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
     ) { uri ->
-        uri?.let { viewModel.setImageUri(it) }
+        uri?.let {
+            try {
+                context.contentResolver.takePersistableUriPermission(
+                    it,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            } catch (_: Exception) { }
+            viewModel.setImageUri(it)
+        }
     }
 
     Scaffold(
         topBar = {
-            TopAppBar(
+            CompactTopAppBar(
                 title = { Text("Scan Pay Slip") },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
@@ -67,7 +96,7 @@ fun PaySlipScanScreen(
                             viewModel.saveReceipt()
                             onNavigateBack()
                         },
-                        enabled = !isBusy && total > 0
+                        enabled = !isBusy && total > 0 && merchant.isNotBlank()
                     ) {
                         Text("Save")
                     }
@@ -96,7 +125,7 @@ fun PaySlipScanScreen(
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text("\uD83D\uDCB0", style = MaterialTheme.typography.displayMedium)
-                            Text("Pay slip image captured",
+                            Text("Income document selected",
                                 style = MaterialTheme.typography.bodyMedium)
                         }
                     }
@@ -107,11 +136,7 @@ fun PaySlipScanScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     OutlinedButton(
-                        onClick = {
-                            val file = File(context.cacheDir, "payslip_${System.currentTimeMillis()}.jpg")
-                            photoUri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-                            cameraLauncher.launch(photoUri!!)
-                        },
+                        onClick = { launchCamera() },
                         modifier = Modifier.weight(1f)
                     ) {
                         Icon(Icons.Filled.CameraAlt, null)
@@ -119,12 +144,12 @@ fun PaySlipScanScreen(
                         Text("Retake")
                     }
                     OutlinedButton(
-                        onClick = { imagePickerLauncher.launch("image/*") },
+                        onClick = { documentPickerLauncher.launch(arrayOf("image/*", "application/pdf")) },
                         modifier = Modifier.weight(1f)
                     ) {
                         Icon(Icons.Filled.PhotoLibrary, null)
                         Spacer(Modifier.width(4.dp))
-                        Text("Gallery")
+                        Text("Files")
                     }
                 }
             } else {
@@ -148,22 +173,18 @@ fun PaySlipScanScreen(
                         Spacer(modifier = Modifier.height(16.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             FilledTonalButton(
-                                onClick = {
-                                    val file = File(context.cacheDir, "payslip_${System.currentTimeMillis()}.jpg")
-                                    photoUri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-                                    cameraLauncher.launch(photoUri!!)
-                                }
+                                onClick = { launchCamera() }
                             ) {
                                 Icon(Icons.Filled.CameraAlt, null)
                                 Spacer(Modifier.width(4.dp))
                                 Text("Camera")
                             }
                             FilledTonalButton(
-                                onClick = { imagePickerLauncher.launch("image/*") }
+                                onClick = { documentPickerLauncher.launch(arrayOf("image/*", "application/pdf")) }
                             ) {
                                 Icon(Icons.Filled.PhotoLibrary, null)
                                 Spacer(Modifier.width(4.dp))
-                                Text("Gallery")
+                                Text("Files")
                             }
                         }
                     }
@@ -193,23 +214,84 @@ fun PaySlipScanScreen(
                 }
             }
 
+            // Employer / Source
+            OutlinedTextField(
+                value = merchant,
+                onValueChange = { viewModel.setMerchant(it) },
+                label = { Text("Employer / Source *") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                leadingIcon = { Icon(Icons.Filled.Business, null) }
+            )
+
+            // Income Category
+            Box {
+                OutlinedTextField(
+                    value = category,
+                    onValueChange = {},
+                    label = { Text("Income Category") },
+                    modifier = Modifier.fillMaxWidth(),
+                    readOnly = true,
+                    leadingIcon = { Icon(Icons.Filled.Category, null) },
+                    trailingIcon = {
+                        IconButton(onClick = { showCategoryDropdown = true }) {
+                            Icon(Icons.Filled.ArrowDropDown, null)
+                        }
+                    }
+                )
+                DropdownMenu(
+                    expanded = showCategoryDropdown,
+                    onDismissRequest = { showCategoryDropdown = false }
+                ) {
+                    IncomeSources.All.forEach { src ->
+                        DropdownMenuItem(
+                            text = { Text(src) },
+                            onClick = {
+                                viewModel.setCategory(src)
+                                showCategoryDropdown = false
+                            },
+                            leadingIcon = {
+                                val emoji = when (src) {
+                                    "Salary" -> "\uD83D\uDCBC"
+                                    "Freelance" -> "\uD83D\uDCBB"
+                                    "Business" -> "\uD83C\uDFE2"
+                                    "Investment" -> "\uD83D\uDCC8"
+                                    "Rental" -> "\uD83C\uDFE0"
+                                    "Bonus" -> "\uD83C\uDF81"
+                                    "Gift" -> "\uD83C\uDF80"
+                                    "Refund" -> "\uD83D\uDD04"
+                                    "Commision" -> "\uD83E\uDD1D"
+                                    else -> "\uD83D\uDCB0"
+                                }
+                                Text(emoji)
+                            }
+                        )
+                    }
+                }
+            }
+
             // Income amount
             OutlinedTextField(
                 value = if (total == 0.0) "" else total.toString(),
-                onValueChange = { viewModel.setTotal(it.toDoubleOrNull() ?: 0.0) },
+                onValueChange = { input ->
+                    val filtered = input.filter { it.isDigit() || it == '.' }
+                    // Only allow one decimal point
+                    if (filtered.count { it == '.' } <= 1) {
+                        viewModel.setTotal(filtered.toDoubleOrNull() ?: 0.0)
+                    }
+                },
                 label = { Text("Net Income Amount *") },
                 modifier = Modifier.fillMaxWidth(),
-                singleLine = true
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
             )
 
             // Date
-            OutlinedTextField(
+            DatePickerField(
                 value = date,
                 onValueChange = { viewModel.setDate(it) },
-                label = { Text("Date") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                placeholder = { Text("yyyy-MM-dd") }
+                label = "Date",
+                modifier = Modifier.fillMaxWidth()
             )
 
             // Notes

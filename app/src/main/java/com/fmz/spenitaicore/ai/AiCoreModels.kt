@@ -25,8 +25,30 @@ data class PaySlipResult(
     val netPay: Double = 0.0,
     val employer: String = "",
     val date: String = "",
+    val category: String = "Salary",
     val notes: String? = null
 )
+
+data class BankStatementResult(
+    val bankName: String = "",
+    val accountLast4: String = "",
+    val period: String = "",
+    val transactions: List<BankTransaction> = emptyList()
+)
+
+data class BankTransaction(
+    val date: String = "",
+    val description: String = "",
+    val amount: Double = 0.0,
+    val type: String = "debit" // "credit" or "debit"
+)
+
+enum class FinancialDocumentType {
+    Income,
+    Expense,
+    BankStatement,
+    Unknown
+}
 
 data class AiInsightResult(
     val summary: String = "",

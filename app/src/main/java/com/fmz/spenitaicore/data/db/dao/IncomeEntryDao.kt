@@ -16,6 +16,9 @@ interface IncomeEntryDao {
     @Query("SELECT * FROM IncomeEntries WHERE date >= :from")
     suspend fun getIncomeEntriesFromSync(from: String?): List<IncomeEntry>
 
+    @Query("SELECT * FROM IncomeEntries ORDER BY date DESC, created_at DESC")
+    suspend fun getAllIncomeEntriesSync(): List<IncomeEntry>
+
     @Query("SELECT * FROM IncomeEntries WHERE date >= :start AND date <= :end ORDER BY date DESC")
     fun getIncomeEntriesBetween(start: String, end: String): Flow<List<IncomeEntry>>
 

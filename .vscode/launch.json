@@ -1,0 +1,15 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug SpenIt (Pixel 10 Pro)",
+            "type": "java",
+            "request": "attach",
+            "hostName": "localhost",
+            "port": 8700,
+            "timeout": 30000,
+            "preLaunchTask": "android: build & install debug",
+            "projectName": "app"
+        }
+    ]
+}

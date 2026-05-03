@@ -8,6 +8,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -18,6 +19,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.fmz.spenitaicore.ai.CategoryBreakdown
 import com.fmz.spenitaicore.ai.SavingTip
 import com.fmz.spenitaicore.ai.SpendingTrend
+import com.fmz.spenitaicore.ui.components.CompactTopAppBar
 import com.fmz.spenitaicore.ui.theme.*
 import com.fmz.spenitaicore.viewmodel.InsightsViewModel
 
@@ -46,212 +48,235 @@ fun InsightsScreen(viewModel: InsightsViewModel) {
 
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text("Insights") })
+            CompactTopAppBar(
+                title = { Text("Insights") },
+                actions = {
+                    IconButton(
+                        onClick = { viewModel.refreshInsights() },
+                        enabled = !isRefreshing
+                    ) {
+                        if (isRefreshing) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Icon(Icons.Filled.Refresh, "Refresh")
+                        }
+                    }
+                }
+            )
         }
     ) { padding ->
-        LazyColumn(
+        PullToRefreshBox(
+            isRefreshing = isRefreshing,
+            onRefresh = { viewModel.refreshInsights() },
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(padding)
         ) {
-            item { Spacer(modifier = Modifier.height(8.dp)) }
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                item { Spacer(modifier = Modifier.height(8.dp)) }
 
-            // Range selector
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    listOf("Last30" to "30D", "QuarterToDate" to "QTD", "YearToDate" to "YTD").forEach { (range, label) ->
-                        FilterChip(
-                            selected = selectedRange == range,
-                            onClick = { viewModel.selectRange(range) },
-                            label = { Text(label) }
+                // Range selector
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        listOf("Last30" to "30D", "QuarterToDate" to "QTD", "YearToDate" to "YTD").forEach { (range, label) ->
+                            FilterChip(
+                                selected = selectedRange == range,
+                                onClick = { viewModel.selectRange(range) },
+                                label = { Text(label) }
+                            )
+                        }
+                    }
+                }
+
+                // Stats cards
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        InsightStatCard(
+                            modifier = Modifier.weight(1f),
+                            label = periodSpendLabel,
+                            value = totalThisMonthText,
+                            change = monthOverMonthText,
+                            isPositive = !isIncrease
+                        )
+                        InsightStatCard(
+                            modifier = Modifier.weight(1f),
+                            label = "Daily Average",
+                            value = averageDailySpendText,
+                            change = null,
+                            isPositive = null
                         )
                     }
                 }
-            }
 
-            // Stats cards
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    InsightStatCard(
-                        modifier = Modifier.weight(1f),
-                        label = periodSpendLabel,
-                        value = totalThisMonthText,
-                        change = monthOverMonthText,
-                        isPositive = !isIncrease
-                    )
-                    InsightStatCard(
-                        modifier = Modifier.weight(1f),
-                        label = "Daily Average",
-                        value = averageDailySpendText,
-                        change = null,
-                        isPositive = null
-                    )
-                }
-            }
-
-            // Tax deductible
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer
-                    )
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(16.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column {
-                            Text("Tax Deductible", style = MaterialTheme.typography.labelSmall)
-                            Text(taxDeductibleTotalText, style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold)
-                        }
-                        Icon(Icons.Filled.Receipt, contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary)
-                    }
-                }
-            }
-
-            // AI Summary
-            if (aiSummary != null) {
+                // Tax deductible
                 item {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                            containerColor = MaterialTheme.colorScheme.primaryContainer
                         )
                     ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text("AI Analysis", style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.SemiBold)
-                                Text(aiStatusText, style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(16.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text("Tax Deductible", style = MaterialTheme.typography.labelSmall)
+                                Text(taxDeductibleTotalText, style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold)
                             }
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(aiSummary!!, style = MaterialTheme.typography.bodyMedium)
+                            Icon(Icons.Filled.Receipt, contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary)
                         }
                     }
                 }
-            }
 
-            // Key findings
-            if (keyFindings.isNotEmpty()) {
-                item {
-                    Text("Key Findings", style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold)
-                }
-                items(keyFindings) { finding ->
-                    Row(modifier = Modifier.padding(vertical = 2.dp)) {
-                        Text("\u2022 ", color = MaterialTheme.colorScheme.primary)
-                        Text(finding, style = MaterialTheme.typography.bodyMedium)
-                    }
-                }
-            }
-
-            // Anomaly alert
-            anomalyAlert?.let {
-                item {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = ErrorRed.copy(alpha = 0.2f))
-                    ) {
-                        Row(modifier = Modifier.padding(12.dp)) {
-                            Text("\u26A0\uFE0F ", style = MaterialTheme.typography.bodyMedium)
-                            Text(it, style = MaterialTheme.typography.bodyMedium)
-                        }
-                    }
-                }
-            }
-
-            // Category breakdown
-            if (topCategories.isNotEmpty()) {
-                item {
-                    Text("Top Categories", style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold)
-                }
-                items(topCategories) { cat ->
-                    CategoryBar(cat)
-                }
-            }
-
-            // Weekly trend
-            if (weeklyTrend.isNotEmpty()) {
-                item {
-                    Text("Weekly Trend", style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold)
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(120.dp),
-                        horizontalArrangement = Arrangement.SpaceEvenly,
-                        verticalAlignment = Alignment.Bottom
-                    ) {
-                        weeklyTrend.forEach { trend ->
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Text(
-                                    "${"%.0f".format(trend.amount)}",
-                                    style = MaterialTheme.typography.labelSmall
-                                )
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Box(
-                                    modifier = Modifier
-                                        .width(24.dp)
-                                        .height(((trend.normalizedHeight * 80)).coerceIn(4.0, 80.0).dp)
-                                        .clip(RoundedCornerShape(4.dp))
-                                        .background(MaterialTheme.colorScheme.primary)
-                                )
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(trend.label, style = MaterialTheme.typography.labelSmall)
+                // AI Summary
+                if (aiSummary != null) {
+                    item {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                            )
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text("AI Analysis", style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.SemiBold)
+                                    Text(aiStatusText, style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(aiSummary!!, style = MaterialTheme.typography.bodyMedium)
                             }
                         }
                     }
                 }
-            }
 
-            // Saving tips
-            if (savingTips.isNotEmpty()) {
-                item {
-                    Text("Saving Tips", style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold)
+                // Key findings
+                if (keyFindings.isNotEmpty()) {
+                    item {
+                        Text("Key Findings", style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold)
+                    }
+                    items(keyFindings) { finding ->
+                        Row(modifier = Modifier.padding(vertical = 2.dp)) {
+                            Text("\u2022 ", color = MaterialTheme.colorScheme.primary)
+                            Text(finding, style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
                 }
-                items(savingTips) { tip ->
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-                        )
-                    ) {
-                        Row(modifier = Modifier.padding(12.dp)) {
-                            Text(tip.icon, style = MaterialTheme.typography.titleMedium)
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(tip.title, style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.SemiBold)
-                                Text(tip.description, style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+                // Anomaly alert
+                anomalyAlert?.let {
+                    item {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(containerColor = ErrorRed.copy(alpha = 0.2f))
+                        ) {
+                            Row(modifier = Modifier.padding(12.dp)) {
+                                Text("\u26A0\uFE0F ", style = MaterialTheme.typography.bodyMedium)
+                                Text(it, style = MaterialTheme.typography.bodyMedium)
                             }
                         }
                     }
                 }
-            }
 
-            item { Spacer(modifier = Modifier.height(32.dp)) }
+                // Category breakdown
+                if (topCategories.isNotEmpty()) {
+                    item {
+                        Text("Top Categories", style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold)
+                    }
+                    items(topCategories) { cat ->
+                        CategoryBar(cat)
+                    }
+                }
+
+                // Weekly trend
+                if (weeklyTrend.isNotEmpty()) {
+                    item {
+                        Text("Weekly Trend", style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(120.dp),
+                            horizontalArrangement = Arrangement.SpaceEvenly,
+                            verticalAlignment = Alignment.Bottom
+                        ) {
+                            weeklyTrend.forEach { trend ->
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text(
+                                        "${"%.0f".format(trend.amount)}",
+                                        style = MaterialTheme.typography.labelSmall
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .width(24.dp)
+                                            .height(((trend.normalizedHeight * 80)).coerceIn(4.0, 80.0).dp)
+                                            .clip(RoundedCornerShape(4.dp))
+                                            .background(MaterialTheme.colorScheme.primary)
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(trend.label, style = MaterialTheme.typography.labelSmall)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Saving tips
+                if (savingTips.isNotEmpty()) {
+                    item {
+                        Text("Saving Tips", style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold)
+                    }
+                    items(savingTips) { tip ->
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                            )
+                        ) {
+                            Row(modifier = Modifier.padding(12.dp)) {
+                                Text(tip.icon, style = MaterialTheme.typography.titleMedium)
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(tip.title, style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.SemiBold)
+                                    Text(tip.description, style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                item { Spacer(modifier = Modifier.height(32.dp)) }
+            }
         }
     }
 }

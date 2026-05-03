@@ -13,6 +13,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.fmz.spenitaicore.data.db.entity.IncomeSources
+import com.fmz.spenitaicore.ui.components.CompactTopAppBar
+import com.fmz.spenitaicore.ui.components.DatePickerField
 import com.fmz.spenitaicore.ui.components.IncomeCard
 import com.fmz.spenitaicore.ui.components.BottomSheetDialog
 import com.fmz.spenitaicore.ui.components.FullBottomSheet
@@ -41,7 +44,7 @@ fun IncomeScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
+            CompactTopAppBar(
                 title = { Text("Income") },
                 actions = {
                     IconButton(onClick = onNavigateToSharedImports) {
@@ -143,36 +146,45 @@ fun IncomeScreen(
     // Edit bottom sheet
     if (isEditVisible && editingEntry != null) {
         var editSource by remember { mutableStateOf(editingEntry!!.source) }
+        var editCategory by remember { mutableStateOf(editingEntry!!.category) }
         var editAmount by remember { mutableStateOf(editingEntry!!.amount.toString()) }
         var editDate by remember { mutableStateOf(editingEntry!!.date) }
         var editNotes by remember { mutableStateOf(editingEntry!!.notes ?: "") }
-        var sourceDropdown by remember { mutableStateOf(false) }
+        var categoryDropdown by remember { mutableStateOf(false) }
 
         BottomSheetDialog(
             visible = true,
             onDismiss = { viewModel.dismissEdit() },
             title = "Edit Income",
             confirmText = "Save",
-            onConfirm = { viewModel.saveEdit(editSource, editAmount, editDate, editNotes) }
+            onConfirm = { viewModel.saveEdit(editSource, editCategory, editAmount, editDate, editNotes) }
         ) {
+            OutlinedTextField(
+                value = editSource,
+                onValueChange = { editSource = it },
+                label = { Text("Source") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
+            Spacer(modifier = Modifier.height(8.dp))
             Box {
                 OutlinedTextField(
-                    value = editSource,
+                    value = editCategory,
                     onValueChange = {},
-                    label = { Text("Source") },
+                    label = { Text("Category") },
                     modifier = Modifier.fillMaxWidth(),
                     readOnly = true,
                     trailingIcon = {
-                        IconButton(onClick = { sourceDropdown = true }) {
+                        IconButton(onClick = { categoryDropdown = true }) {
                             Icon(Icons.Filled.ArrowDropDown, null)
                         }
                     }
                 )
-                DropdownMenu(expanded = sourceDropdown, onDismissRequest = { sourceDropdown = false }) {
-                    com.fmz.spenitaicore.data.db.entity.IncomeSources.All.forEach { src ->
+                DropdownMenu(expanded = categoryDropdown, onDismissRequest = { categoryDropdown = false }) {
+                    IncomeSources.All.forEach { category ->
                         DropdownMenuItem(
-                            text = { Text(src) },
-                            onClick = { editSource = src; sourceDropdown = false }
+                            text = { Text(category) },
+                            onClick = { editCategory = category; categoryDropdown = false }
                         )
                     }
                 }
@@ -186,12 +198,11 @@ fun IncomeScreen(
                 singleLine = true
             )
             Spacer(modifier = Modifier.height(8.dp))
-            OutlinedTextField(
+            DatePickerField(
                 value = editDate,
                 onValueChange = { editDate = it },
-                label = { Text("Date (yyyy-MM-dd)") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true
+                label = "Date",
+                modifier = Modifier.fillMaxWidth()
             )
             Spacer(modifier = Modifier.height(8.dp))
             OutlinedTextField(
@@ -221,6 +232,10 @@ fun IncomeScreen(
                         Text("${entry.currency} ${"%.2f".format(entry.amount)}",
                             style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.primary)
+                    }
+                    Column {
+                        Text("Category", style = MaterialTheme.typography.labelSmall)
+                        Text(entry.category, style = MaterialTheme.typography.bodyMedium)
                     }
                     Column {
                         Text("Date", style = MaterialTheme.typography.labelSmall)

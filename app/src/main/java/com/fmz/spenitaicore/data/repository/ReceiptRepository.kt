@@ -15,7 +15,12 @@ class ReceiptRepository(
 
     fun getReceiptsFrom(from: String): Flow<List<Receipt>> = receiptDao.getReceiptsFrom(from)
 
-    suspend fun getReceiptsFromSync(from: String?): List<Receipt> = receiptDao.getReceiptsFromSync(from)
+    suspend fun getReceiptsFromSync(from: String?): List<Receipt> =
+        if (from == null) {
+            receiptDao.getAllReceiptsSync()
+        } else {
+            receiptDao.getReceiptsFromSync(from)
+        }
 
     suspend fun getReceiptById(id: Int): Receipt? = receiptDao.getReceiptById(id)
 

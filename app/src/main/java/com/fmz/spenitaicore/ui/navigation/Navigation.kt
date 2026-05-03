@@ -44,8 +44,20 @@ val bottomNavItems = listOf(
 )
 
 @Composable
-fun SpenItNavHost(container: AppContainer) {
+fun SpenItNavHost(
+    container: AppContainer,
+    sharedImportSignal: Int = 0
+) {
     val navController = rememberNavController()
+
+    // Auto-navigate to shared imports if files were shared into the app
+    LaunchedEffect(sharedImportSignal) {
+        if (sharedImportSignal > 0) {
+            navController.navigate("shared_imports") {
+                launchSingleTop = true
+            }
+        }
+    }
 
     // Create ViewModels (scoped to the NavHost)
     val dashboardViewModel = remember { DashboardViewModel() }
@@ -134,7 +146,7 @@ fun SpenItNavHost(container: AppContainer) {
             }
 
             composable("payslip_scan") {
-                val scanViewModel = remember { ReceiptScanViewModel() }
+                val scanViewModel = remember { ReceiptScanViewModel(isIncome = true) }
                 PaySlipScanScreen(
                     viewModel = scanViewModel,
                     onNavigateBack = { navController.popBackStack() }
@@ -145,6 +157,7 @@ fun SpenItNavHost(container: AppContainer) {
                 val sharedImportsViewModel = remember { SharedImportsViewModel() }
                 SharedImportsScreen(
                     viewModel = sharedImportsViewModel,
+                    pendingImportSignal = sharedImportSignal,
                     onNavigateBack = { navController.popBackStack() }
                 )
             }

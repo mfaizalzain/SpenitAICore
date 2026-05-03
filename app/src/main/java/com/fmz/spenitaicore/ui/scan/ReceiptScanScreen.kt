@@ -17,10 +17,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.fmz.spenitaicore.data.db.entity.ReceiptItem
+import com.fmz.spenitaicore.ui.components.CompactTopAppBar
+import com.fmz.spenitaicore.ui.components.DatePickerField
 import com.fmz.spenitaicore.viewmodel.ReceiptScanViewModel
 import java.io.File
 
@@ -66,7 +70,7 @@ fun ReceiptScanScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
+            CompactTopAppBar(
                 title = { Text("Scan Receipt") },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
@@ -216,31 +220,41 @@ fun ReceiptScanScreen(
             )
 
             // Date
-            OutlinedTextField(
+            DatePickerField(
                 value = date,
                 onValueChange = { viewModel.setDate(it) },
-                label = { Text("Date") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                placeholder = { Text("yyyy-MM-dd") }
+                label = "Date",
+                modifier = Modifier.fillMaxWidth()
             )
 
             // Total
             OutlinedTextField(
                 value = if (total == 0.0) "" else total.toString(),
-                onValueChange = { viewModel.setTotal(it.toDoubleOrNull() ?: 0.0) },
+                onValueChange = { input ->
+                    val filtered = input.filter { it.isDigit() || it == '.' }
+                    if (filtered.count { it == '.' } <= 1) {
+                        viewModel.setTotal(filtered.toDoubleOrNull() ?: 0.0)
+                    }
+                },
                 label = { Text("Total") },
                 modifier = Modifier.fillMaxWidth(),
-                singleLine = true
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
             )
 
             // Tax amount
             OutlinedTextField(
                 value = if (taxAmount == 0.0) "" else taxAmount.toString(),
-                onValueChange = { viewModel.setTaxAmount(it.toDoubleOrNull() ?: 0.0) },
+                onValueChange = { input ->
+                    val filtered = input.filter { it.isDigit() || it == '.' }
+                    if (filtered.count { it == '.' } <= 1) {
+                        viewModel.setTaxAmount(filtered.toDoubleOrNull() ?: 0.0)
+                    }
+                },
                 label = { Text("Tax Amount") },
                 modifier = Modifier.fillMaxWidth(),
-                singleLine = true
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
             )
 
             // Category dropdown

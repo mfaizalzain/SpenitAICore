@@ -134,15 +134,15 @@ class IncomeViewModel : ViewModel() {
         _editingEntry.value = null
     }
 
-    fun saveEdit(source: String, amountText: String, date: String, notes: String) {
+    fun saveEdit(source: String, category: String, amountText: String, date: String, notes: String) {
         viewModelScope.launch {
             val entry = _editingEntry.value ?: return@launch
             val amount = amountText.toDoubleOrNull()
             if (amount == null || amount <= 0) return@launch
 
             val updated = entry.copy(
-                source = source.ifBlank { "Other Income" },
-                category = source.ifBlank { "Other Income" },
+                source = source.ifBlank { "Income" },
+                category = category.ifBlank { "Other Income" },
                 amount = amount,
                 date = date.ifBlank { DateUtils.today() },
                 notes = notes.trim().ifBlank { null }
