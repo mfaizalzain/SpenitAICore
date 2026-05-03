@@ -1,0 +1,339 @@
+package com.fmz.spenit.ui.expenses
+
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.fmz.spenit.data.db.entity.Receipt
+import com.fmz.spenit.ui.components.ReceiptCard
+import com.fmz.spenit.ui.components.BottomSheetDialog
+import com.fmz.spenit.ui.components.FullBottomSheet
+import com.fmz.spenit.viewmodel.ExpensesViewModel
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ExpensesScreen(
+    viewModel: ExpensesViewModel,
+    onNavigateToScan: () -> Unit,
+    onNavigateToSharedImports: () -> Unit
+) {
+    val filteredReceipts by viewModel.filteredReceipts.collectAsStateWithLifecycle()
+    val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
+    val selectedCategory by viewModel.selectedCategory.collectAsStateWithLifecycle()
+    val showTaxOnly by viewModel.showTaxOnly.collectAsStateWithLifecycle()
+    val selectedPeriod by viewModel.selectedPeriod.collectAsStateWithLifecycle()
+    val totalText by viewModel.totalText.collectAsStateWithLifecycle()
+    val isEditVisible by viewModel.isEditVisible.collectAsStateWithLifecycle()
+    val isDetailVisible by viewModel.isDetailVisible.collectAsStateWithLifecycle()
+    val editingReceipt by viewModel.editingReceipt.collectAsStateWithLifecycle()
+    val selectedReceipt by viewModel.selectedReceipt.collectAsStateWithLifecycle()
+    val selectedItems by viewModel.selectedItems.collectAsStateWithLifecycle()
+    val selectedTagsDisplay by viewModel.selectedTagsDisplay.collectAsStateWithLifecycle()
+    val isRefreshing by viewModel.isRefreshing.collectAsStateWithLifecycle()
+    val availableTaxYears by viewModel.availableTaxYears.collectAsStateWithLifecycle()
+    val selectedTaxYear by viewModel.selectedTaxYear.collectAsStateWithLifecycle()
+
+    var editMerchant by remember { mutableStateOf("") }
+    var editAmount by remember { mutableStateOf("") }
+    var editCategory by remember { mutableStateOf("General") }
+    var editNotes by remember { mutableStateOf("") }
+    var showCategoryDropdown by remember { mutableStateOf(false) }
+    var showPeriodDropdown by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        viewModel.quietLoad()
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Expenses") },
+                actions = {
+                    IconButton(onClick = onNavigateToSharedImports) {
+                        Icon(Icons.Outlined.Inbox, contentDescription = "Imports")
+                    }
+                    IconButton(onClick = onNavigateToScan) {
+                        Icon(Icons.Filled.Add, contentDescription = "Add")
+                    }
+                }
+            )
+        },
+        floatingActionButton = {
+            FloatingActionButton(onClick = onNavigateToScan) {
+                Icon(Icons.Filled.Add, contentDescription = "Scan Receipt")
+            }
+        }
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+        ) {
+            // Search bar
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { viewModel.onSearchQueryChanged(it) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                placeholder = { Text("Search receipts... (tax 2024, >500, #groceries)") },
+                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+                trailingIcon = {
+                    if (searchQuery.isNotEmpty()) {
+                        IconButton(onClick = {
+                            viewModel.onSearchQueryChanged("")
+                        }) {
+                            Icon(Icons.Filled.Close, contentDescription = "Clear")
+                        }
+                    } else {
+                        IconButton(onClick = { viewModel.applySearchFilters() }) {
+                            Icon(Icons.Filled.KeyboardArrowRight, contentDescription = "Search")
+                        }
+                    }
+                },
+                singleLine = true
+            )
+
+            // Filter row
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Period filter
+                FilterChip(
+                    selected = true,
+                    onClick = { showPeriodDropdown = true },
+                    label = { Text(selectedPeriod) },
+                    trailingIcon = { Icon(Icons.Filled.ArrowDropDown, null, Modifier.size(18.dp)) }
+                )
+
+                // Category filter
+                FilterChip(
+                    selected = selectedCategory != "All",
+                    onClick = { showCategoryDropdown = true },
+                    label = { Text(selectedCategory) },
+                    trailingIcon = { Icon(Icons.Filled.ArrowDropDown, null, Modifier.size(18.dp)) }
+                )
+
+                // Tax toggle
+                FilterChip(
+                    selected = showTaxOnly,
+                    onClick = { viewModel.setShowTaxOnly(!showTaxOnly) },
+                    label = { Text("Tax") }
+                )
+            }
+
+            // Total header
+            Text(
+                text = "Total: $totalText",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+            )
+
+            // List
+            if (filteredReceipts.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(32.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        "No receipts found",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            } else {
+                LazyColumn(
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(filteredReceipts, key = { it.id }) { receipt ->
+                        ReceiptCard(
+                            receipt = receipt,
+                            onClick = { viewModel.viewReceipt(receipt) },
+                            onEdit = { viewModel.startEdit(receipt) },
+                            onDelete = { viewModel.deleteReceipt(receipt) }
+                        )
+                    }
+                    item { Spacer(modifier = Modifier.height(72.dp)) }
+                }
+            }
+        }
+    }
+
+    // Period dropdown
+    DropdownMenu(
+        expanded = showPeriodDropdown,
+        onDismissRequest = { showPeriodDropdown = false }
+    ) {
+        listOf("Last30" to "Last 30 Days", "Last90" to "Last 90 Days", "ThisYear" to "This Year", "All" to "All Time")
+            .forEach { (value, label) ->
+                DropdownMenuItem(
+                    text = { Text(label) },
+                    onClick = {
+                        viewModel.setPeriod(value)
+                        showPeriodDropdown = false
+                    }
+                )
+            }
+    }
+
+    // Category dropdown
+    DropdownMenu(
+        expanded = showCategoryDropdown,
+        onDismissRequest = { showCategoryDropdown = false }
+    ) {
+        DropdownMenuItem(
+            text = { Text("All") },
+            onClick = {
+                viewModel.setCategory("All")
+                showCategoryDropdown = false
+            }
+        )
+        ExpensesViewModel.SPENDING_CATEGORIES.forEach { cat ->
+            DropdownMenuItem(
+                text = { Text(cat) },
+                onClick = {
+                    viewModel.setCategory(cat)
+                    showCategoryDropdown = false
+                }
+            )
+        }
+    }
+
+    // Edit bottom sheet
+    if (isEditVisible && editingReceipt != null) {
+        var currentMerchant by remember { mutableStateOf(editingReceipt!!.merchant) }
+        var currentAmount by remember { mutableStateOf(editingReceipt!!.total.toString()) }
+        var currentCategory by remember { mutableStateOf(editingReceipt!!.category) }
+        var currentNotes by remember { mutableStateOf(editingReceipt!!.notes ?: "") }
+        var catDropdown by remember { mutableStateOf(false) }
+
+        BottomSheetDialog(
+            visible = true,
+            onDismiss = { viewModel.dismissEdit() },
+            title = "Edit Receipt",
+            confirmText = "Save",
+            onConfirm = {
+                viewModel.saveEdit(currentMerchant, currentAmount, currentCategory, currentNotes)
+            }
+        ) {
+            OutlinedTextField(
+                value = currentMerchant,
+                onValueChange = { currentMerchant = it },
+                label = { Text("Merchant") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedTextField(
+                value = currentAmount,
+                onValueChange = { currentAmount = it },
+                label = { Text("Amount") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Box {
+                OutlinedTextField(
+                    value = currentCategory,
+                    onValueChange = {},
+                    label = { Text("Category") },
+                    modifier = Modifier.fillMaxWidth(),
+                    readOnly = true,
+                    trailingIcon = {
+                        IconButton(onClick = { catDropdown = true }) {
+                            Icon(Icons.Filled.ArrowDropDown, null)
+                        }
+                    }
+                )
+                DropdownMenu(expanded = catDropdown, onDismissRequest = { catDropdown = false }) {
+                    ExpensesViewModel.SPENDING_CATEGORIES.forEach { cat ->
+                        DropdownMenuItem(
+                            text = { Text(cat) },
+                            onClick = {
+                                currentCategory = cat
+                                catDropdown = false
+                            }
+                        )
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedTextField(
+                value = currentNotes,
+                onValueChange = { currentNotes = it },
+                label = { Text("Notes") },
+                modifier = Modifier.fillMaxWidth(),
+                minLines = 2
+            )
+        }
+    }
+
+    // Detail bottom sheet
+    FullBottomSheet(
+        visible = isDetailVisible,
+        onDismiss = { viewModel.dismissDetail() },
+        title = "Receipt Details"
+    ) {
+        Column {
+            selectedReceipt?.let { receipt ->
+                Text(receipt.merchant, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Column {
+                        Text("Amount", style = MaterialTheme.typography.labelSmall)
+                        Text("${receipt.currency} ${"%.2f".format(receipt.total)}",
+                            style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    }
+                    Column {
+                        Text("Category", style = MaterialTheme.typography.labelSmall)
+                        Text(receipt.category, style = MaterialTheme.typography.bodyMedium)
+                    }
+                    Column {
+                        Text("Date", style = MaterialTheme.typography.labelSmall)
+                        Text(receipt.date, style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+                receipt.notes?.let {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("Notes: $it", style = MaterialTheme.typography.bodyMedium)
+                }
+                if (selectedTagsDisplay.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("Tags: $selectedTagsDisplay", style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                if (selectedItems.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text("Items", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    selectedItems.forEach { item ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("${item.description} (x${"%.0f".format(item.quantity)})", modifier = Modifier.weight(1f))
+                            Text("${receipt.currency} ${"%.2f".format(item.total)}")
+                        }
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(24.dp))
+        }
+    }
+}

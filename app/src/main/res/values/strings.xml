@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">SpenIt</string>
+    <string name="greeting_morning">Good morning</string>
+    <string name="greeting_afternoon">Good afternoon</string>
+    <string name="greeting_evening">Good evening</string>
+
+    <string name="tab_dashboard">Dashboard</string>
+    <string name="tab_expenses">Expenses</string>
+    <string name="tab_income">Income</string>
+    <string name="tab_insights">Insights</string>
+    <string name="tab_settings">Settings</string>
+
+    <string name="label_today">Today</string>
+    <string name="label_this_week">This Week</string>
+    <string name="label_this_month">This Month</string>
+    <string name="label_safe_to_spend">Safe to Spend</string>
+    <string name="label_total_income">Total Income</string>
+    <string name="label_net">Net</string>
+    <string name="label_daily_average">Daily Average</string>
+    <string name="label_tax_deductible">Tax Deductible</string>
+
+    <string name="status_on_track">On track</string>
+    <string name="status_watch_spending">Watch spending</string>
+    <string name="status_overspending">Overspending</string>
+
+    <string name="scan_receipt">Scan Receipt</string>
+    <string name="scan_pay_slip">Add Income</string>
+    <string name="add_income">Add Income</string>
+    <string name="import_bank_statement">Import Bank Statement</string>
+    <string name="view_all">View All</string>
+    <string name="recent_receipts">Recent Receipts</string>
+
+    <string name="no_receipts">No receipts yet</string>
+    <string name="no_receipts_description">Scan your first receipt to get started</string>
+    <string name="no_income">No income entries</string>
+    <string name="no_imports">No files to import</string>
+    <string name="no_imports_description">Add files to scan and process them</string>
+
+    <string name="search_receipts">Search receipts… (tax 2024, >500, #groceries)</string>
+    <string name="edit_receipt">Edit Receipt</string>
+    <string name="edit_income">Edit Income</string>
+    <string name="save">Save</string>
+    <string name="cancel">Cancel</string>
+    <string name="delete">Delete</string>
+    <string name="edit">Edit</string>
+    <string name="retry">Retry</string>
+    <string name="process">Process</string>
+    <string name="remove">Remove</string>
+    <string name="clear_done">Clear Done</string>
+    <string name="add_files">Add Files</string>
+    <string name="choose_type">Choose Type</string>
+
+    <string name="extract_data">Extract Data</string>
+    <string name="processing">Processing…</string>
+    <string name="camera">Camera</string>
+    <string name="gallery">Gallery</string>
+    <string name="retake">Retake</string>
+
+    <string name="category_all">All</string>
+    <string name="filter_tax">Tax</string>
+    <string name="period_last_30">Last 30 Days</string>
+    <string name="period_last_90">Last 90 Days</string>
+    <string name="period_this_year">This Year</string>
+    <string name="period_all">All Time</string>
+</resources>
