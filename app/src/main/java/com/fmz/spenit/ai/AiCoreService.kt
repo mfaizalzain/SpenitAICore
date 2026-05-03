@@ -1,6 +1,7 @@
 package com.fmz.spenit.ai
 
 import android.content.Context
+import android.content.Intent
 import android.graphics.BitmapFactory
 import android.net.Uri
 import com.fmz.spenit.data.preferences.AppPreferences
@@ -17,6 +18,23 @@ class AiCoreService(
     private val preferences: AppPreferences,
     private val receiptRepository: ReceiptRepository
 ) {
+    companion object {
+        private const val AICORE_PACKAGE = "com.google.android.aicore"
+        private const val AICORE_PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=$AICORE_PACKAGE"
+
+        fun isAiCoreAvailable(context: Context): Boolean {
+            return try {
+                context.packageManager.getPackageInfo(AICORE_PACKAGE, 0)
+                true
+            } catch (_: Exception) {
+                false
+            }
+        }
+
+        fun getInstallIntent(): Intent {
+            return Intent(Intent.ACTION_VIEW, Uri.parse(AICORE_PLAY_STORE_URL))
+        }
+    }
 
     suspend fun extractReceiptData(
         imagePath: String,

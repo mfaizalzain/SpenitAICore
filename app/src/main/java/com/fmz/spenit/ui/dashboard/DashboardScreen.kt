@@ -18,6 +18,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.fmz.spenit.data.db.entity.Receipt
 import com.fmz.spenit.ui.components.ReceiptCard
 import com.fmz.spenit.ui.components.FullBottomSheet
+import com.fmz.spenit.ui.components.AiCoreInstallDialog
 import com.fmz.spenit.ui.theme.SuccessGreen
 import com.fmz.spenit.ui.theme.WarningOrange
 import com.fmz.spenit.ui.theme.ErrorRed
@@ -50,6 +51,11 @@ fun DashboardScreen(
 
     LaunchedEffect(Unit) {
         viewModel.quietLoad()
+    }
+
+    var showAiCoreDialog by remember { mutableStateOf(true) }
+    if (showAiCoreDialog) {
+        AiCoreInstallDialog(onDismiss = { showAiCoreDialog = false })
     }
 
     Scaffold(
