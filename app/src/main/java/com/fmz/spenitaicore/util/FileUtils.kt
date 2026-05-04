@@ -14,14 +14,20 @@ object FileUtils {
     fun copySharedFileToCache(context: Context, sourceUri: Uri, prefix: String = "shared"): File? {
         return try {
             val mimeType = context.contentResolver.getType(sourceUri)
+            val displayName = getDisplayName(context, sourceUri) ?: "${prefix}_${System.currentTimeMillis()}"
             val extension = when {
                 mimeType == "application/pdf" -> ".pdf"
                 mimeType?.startsWith("image/") == true -> ".jpg"
-                else -> ".bin"
+                else -> displayName.substringAfterLast('.', "").lowercase().let { ext ->
+                    when (ext) {
+                        "pdf" -> ".pdf"
+                        "jpg", "jpeg", "png", "webp", "heic", "heif" -> ".jpg"
+                        "csv" -> ".csv"
+                        else -> ".bin"
+                    }
+                }
             }
-
-            val displayName = getDisplayName(context, sourceUri) ?: "${prefix}_${System.currentTimeMillis()}"
-            val safeName = displayName.replace(Regex("[^a-zA-Z0-9._-]"), "_")
+            val safeName = displayName.replace(Regex("[^a-zA-Z0-9._\\-]"), "_")
             val nameWithoutExt = safeName.substringBeforeLast('.', safeName)
             val destFile = File(context.cacheDir, "${prefix}_${System.currentTimeMillis()}_$nameWithoutExt$extension")
 

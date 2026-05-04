@@ -19,21 +19,21 @@ interface ReceiptDao {
     @Query("SELECT * FROM Receipts ORDER BY date DESC, created_at DESC")
     suspend fun getAllReceiptsSync(): List<Receipt>
 
-    @Query("SELECT * FROM Receipts WHERE date >= :start AND date <= :end ORDER BY date DESC")
+    @Query("SELECT * FROM Receipts WHERE date >= :start AND date <= :end ORDER BY date DESC, created_at DESC")
     fun getReceiptsBetween(start: String, end: String): Flow<List<Receipt>>
 
-    @Query("SELECT * FROM Receipts WHERE is_tax_deductible = 1 AND tax_year = :taxYear ORDER BY date DESC")
+    @Query("SELECT * FROM Receipts WHERE is_tax_deductible = 1 AND tax_year = :taxYear ORDER BY date DESC, created_at DESC")
     fun getTaxReceipts(taxYear: String): Flow<List<Receipt>>
 
     @Query("SELECT * FROM Receipts WHERE id = :id")
     suspend fun getReceiptById(id: Int): Receipt?
 
     @Query("""
-        SELECT * FROM Receipts 
-        WHERE (merchant LIKE '%' || :query || '%' 
-            OR category LIKE '%' || :query || '%' 
+        SELECT * FROM Receipts
+        WHERE (merchant LIKE '%' || :query || '%'
+            OR category LIKE '%' || :query || '%'
             OR notes LIKE '%' || :query || '%')
-        ORDER BY date DESC
+        ORDER BY date DESC, created_at DESC
     """)
     suspend fun searchReceipts(query: String): List<Receipt>
 
@@ -46,7 +46,7 @@ interface ReceiptDao {
     @Query("SELECT COALESCE(SUM(total), 0) FROM Receipts WHERE date >= :from AND date <= :to")
     suspend fun getTotalSpend(from: String, to: String): Double
 
-    @Query("SELECT * FROM Receipts WHERE date = :date ORDER BY date DESC")
+    @Query("SELECT * FROM Receipts WHERE date = :date ORDER BY created_at DESC")
     suspend fun getReceiptsByDate(date: String): List<Receipt>
 
     @Query("SELECT * FROM Receipts WHERE date = :date AND currency = :currency AND total = :total AND id != :excludeId AND merchant = :merchant")

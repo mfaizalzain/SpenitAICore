@@ -436,7 +436,7 @@ class AiCoreService(
     }
 
     private fun loadImageBitmap(imagePath: String): Bitmap? {
-        return try {
+        val raw = try {
             if (imagePath.startsWith("content://") || imagePath.startsWith("file://")) {
                 val uri = Uri.parse(imagePath)
                 context.contentResolver.openInputStream(uri)?.use {
@@ -447,7 +447,18 @@ class AiCoreService(
             }
         } catch (e: Exception) {
             BitmapFactory.decodeFile(imagePath)
-        }
+        } ?: return null
+        val maxDim = maxOf(raw.width, raw.height)
+        if (maxDim <= 2048) return raw
+        val scale = 2048f / maxDim
+        val scaled = Bitmap.createScaledBitmap(
+            raw,
+            (raw.width * scale).toInt().coerceAtLeast(1),
+            (raw.height * scale).toInt().coerceAtLeast(1),
+            true
+        )
+        if (scaled !== raw) raw.recycle()
+        return scaled
     }
 
     private fun loadPdfAsBitmap(pdfPath: String): Bitmap? {
@@ -482,10 +493,19 @@ class AiCoreService(
     private fun isPdfInput(path: String): Boolean {
         val lowerPath = path.lowercase()
         if (lowerPath.endsWith(".pdf")) return true
-        if (!path.startsWith("content://")) return false
-
+        if (path.startsWith("content://")) {
+            return try {
+                context.contentResolver.getType(Uri.parse(path)) == "application/pdf"
+            } catch (_: Exception) {
+                false
+            }
+        }
         return try {
-            context.contentResolver.getType(Uri.parse(path)) == "application/pdf"
+            java.io.FileInputStream(path).use { fis ->
+                val header = ByteArray(4)
+                fis.read(header) == 4 && header[0] == 0x25.toByte() && header[1] == 0x50.toByte()
+                    && header[2] == 0x44.toByte() && header[3] == 0x46.toByte()
+            }
         } catch (_: Exception) {
             false
         }
