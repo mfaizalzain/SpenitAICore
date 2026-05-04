@@ -33,7 +33,8 @@ data class BankStatementResult(
     val bankName: String = "",
     val accountLast4: String = "",
     val period: String = "",
-    val transactions: List<BankTransaction> = emptyList()
+    val transactions: List<BankTransaction> = emptyList(),
+    val errorMessage: String? = null
 )
 
 data class BankTransaction(

@@ -243,7 +243,9 @@ class SharedImportsViewModel : ViewModel() {
 
     private suspend fun importBankStatement(item: SharedImportItem, currency: String): ImportResult {
         val result = aiCore.extractBankStatementData(item.filePath, currency)
-            ?: return ImportResult.failure("Could not extract bank statement data")
+        result.errorMessage?.let {
+            return ImportResult.failure(it)
+        }
 
         if (result.transactions.isEmpty()) {
             return ImportResult.failure("No transactions found")

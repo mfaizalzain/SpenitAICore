@@ -131,7 +131,7 @@ class AiCoreService(
             val model = getAvailableModel() ?: return null
 
             val prompt = """
-                Extract from this receipt: merchant, date (YYYY-MM-DD), total, tax, category from [${ExpensesViewModel.SPENDING_CATEGORIES.joinToString(", ")}].
+                Extract from this receipt: merchant, transaction date (YYYY-MM-DD), total, tax, category from [${ExpensesViewModel.SPENDING_CATEGORIES.joinToString(", ")}].
                 Return ONLY: {"merchant":"...","date":"...","total":0.0,"currency":"$currency","category":"General","taxAmount":0.0}
             """.trimIndent()
 
@@ -257,10 +257,11 @@ class AiCoreService(
     suspend fun extractBankStatementData(
         imagePath: String,
         currency: String
-    ): BankStatementResult? {
+    ): BankStatementResult {
         Log.d("AiCoreService", "Starting bank statement extraction for: $imagePath")
         return try {
-            val model = getAvailableModel() ?: return null
+            val model = getAvailableModel()
+            if (model == null) return BankStatementResult(errorMessage = "AI model not available. Install Google AICore.")
 
             val bitmaps: List<Bitmap> = withContext(Dispatchers.IO) {
                 if (isPdfInput(imagePath)) loadPdfPages(imagePath)
@@ -268,17 +269,22 @@ class AiCoreService(
             }
             if (bitmaps.isEmpty()) {
                 Log.w("AiCoreService", "No bitmaps loaded from $imagePath")
-                return null
+                return BankStatementResult(errorMessage = "Could not load image. File may be unsupported or corrupted.")
             }
 
             var bankName = ""
             var accountLast4 = ""
             var period = ""
             val allTransactions = mutableListOf<BankTransaction>()
+            var pageErrors = 0
 
             for ((index, bitmap) in bitmaps.withIndex()) {
                 Log.d("AiCoreService", "Processing page ${index + 1}/${bitmaps.size}")
-                val pageResult = extractPageTransactions(model, bitmap) ?: continue
+                val pageResult = extractPageTransactions(model, bitmap)
+                if (pageResult == null) {
+                    pageErrors++
+                    continue
+                }
                 if (bankName.isEmpty()) bankName = pageResult.bankName
                 if (accountLast4.isEmpty()) accountLast4 = pageResult.accountLast4
                 if (period.isEmpty()) period = pageResult.period
@@ -286,15 +292,19 @@ class AiCoreService(
             }
 
             Log.d("AiCoreService", "Total transactions extracted: ${allTransactions.size}")
-            BankStatementResult(
-                bankName = bankName,
-                accountLast4 = accountLast4,
-                period = period,
-                transactions = allTransactions
-            )
+            if (allTransactions.isEmpty() && pageErrors > 0 && pageErrors == bitmaps.size) {
+                BankStatementResult(errorMessage = "AI failed to parse the document. Try a clearer image or different file.")
+            } else {
+                BankStatementResult(
+                    bankName = bankName,
+                    accountLast4 = accountLast4,
+                    period = period,
+                    transactions = allTransactions
+                )
+            }
         } catch (e: Exception) {
             Log.e("AiCoreService", "Bank statement extraction error", e)
-            null
+            BankStatementResult(errorMessage = "Extraction error: ${e.message ?: "Unknown error"}")
         }
     }
 
@@ -573,8 +583,8 @@ class AiCoreService(
         val normalizedType = when {
             type.contains("credit", ignoreCase = true) || type.equals("cr", ignoreCase = true) -> "credit"
             type.contains("debit", ignoreCase = true) || type.equals("dr", ignoreCase = true) -> "debit"
-            signedAmount >= 0.0 -> "credit"
-            else -> "debit"
+            signedAmount < 0.0 -> "debit"
+            else -> "debit" // default to debit for bank statements — most transactions are expenses
         }
 
         return BankTransaction(
@@ -596,6 +606,7 @@ class AiCoreService(
     }
 
     private fun String.parseVisibleAmount(): Double? {
+        val negative = trim().startsWith("-")
         val amountText = replace(Regex("[^0-9,\\.\\-]"), "")
             .trim(',', '.')
             .ifBlank { return null }
@@ -615,7 +626,8 @@ class AiCoreService(
             else -> amountText.replace(",", "")
         }
 
-        return normalized.toDoubleOrNull()?.let { kotlin.math.abs(it) }
+        val absolute = normalized.replace("-", "").toDoubleOrNull() ?: return null
+        return if (negative || amountText.startsWith("-")) -absolute else absolute
     }
 
     private fun JsonObject.findValue(vararg keys: String): JsonElement? {
