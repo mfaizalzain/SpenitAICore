@@ -22,6 +22,13 @@ class ReceiptRepository(
             receiptDao.getReceiptsFromSync(from)
         }
 
+    suspend fun getReceiptsByCreatedAtFromSync(fromMillis: Long?): List<Receipt> =
+        if (fromMillis == null) {
+            receiptDao.getAllReceiptsSync()
+        } else {
+            receiptDao.getReceiptsByCreatedAtFromSync(fromMillis)
+        }
+
     suspend fun getReceiptById(id: Int): Receipt? = receiptDao.getReceiptById(id)
 
     suspend fun searchReceipts(query: String): List<Receipt> = receiptDao.searchReceipts(query)

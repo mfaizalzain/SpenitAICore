@@ -13,8 +13,11 @@ interface ReceiptDao {
     @Query("SELECT * FROM Receipts WHERE date >= :from ORDER BY date DESC, created_at DESC")
     fun getReceiptsFrom(from: String): Flow<List<Receipt>>
 
-    @Query("SELECT * FROM Receipts WHERE date >= :from")
+    @Query("SELECT * FROM Receipts WHERE date >= :from ORDER BY date DESC, created_at DESC")
     suspend fun getReceiptsFromSync(from: String?): List<Receipt>
+
+    @Query("SELECT * FROM Receipts WHERE created_at >= :fromMillis ORDER BY date DESC, created_at DESC")
+    suspend fun getReceiptsByCreatedAtFromSync(fromMillis: Long): List<Receipt>
 
     @Query("SELECT * FROM Receipts ORDER BY date DESC, created_at DESC")
     suspend fun getAllReceiptsSync(): List<Receipt>

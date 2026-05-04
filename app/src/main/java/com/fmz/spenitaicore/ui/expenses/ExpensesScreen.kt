@@ -18,7 +18,12 @@ import com.fmz.spenitaicore.ui.components.CompactTopAppBar
 import com.fmz.spenitaicore.ui.components.ReceiptCard
 import com.fmz.spenitaicore.ui.components.BottomSheetDialog
 import com.fmz.spenitaicore.ui.components.FullBottomSheet
+import com.fmz.spenitaicore.ui.components.DatePickerField
+import com.fmz.spenitaicore.util.DateUtils
 import com.fmz.spenitaicore.viewmodel.ExpensesViewModel
+
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -116,7 +121,10 @@ fun ExpensesScreen(
                 FilterChip(
                     selected = true,
                     onClick = { showPeriodDropdown = true },
-                    label = { Text(selectedPeriod) },
+                    label = {
+                        val periods = listOf("Last30" to "Last 30 Days", "Last90" to "Last 90 Days", "ThisYear" to "This Year", "All" to "All Time")
+                        Text(periods.firstOrNull { it.first == selectedPeriod }?.second ?: selectedPeriod)
+                    },
                     trailingIcon = { Icon(Icons.Filled.ArrowDropDown, null, Modifier.size(18.dp)) }
                 )
 
@@ -221,6 +229,7 @@ fun ExpensesScreen(
     if (isEditVisible && editingReceipt != null) {
         var currentMerchant by remember { mutableStateOf(editingReceipt!!.merchant) }
         var currentAmount by remember { mutableStateOf(editingReceipt!!.total.toString()) }
+        var currentDate by remember { mutableStateOf(editingReceipt!!.date) }
         var currentCategory by remember { mutableStateOf(editingReceipt!!.category) }
         var currentNotes by remember { mutableStateOf(editingReceipt!!.notes ?: "") }
         var catDropdown by remember { mutableStateOf(false) }
@@ -231,7 +240,7 @@ fun ExpensesScreen(
             title = "Edit Receipt",
             confirmText = "Save",
             onConfirm = {
-                viewModel.saveEdit(currentMerchant, currentAmount, currentCategory, currentNotes)
+                viewModel.saveEdit(currentMerchant, currentAmount, currentCategory, currentNotes, currentDate)
             }
         ) {
             OutlinedTextField(
@@ -240,6 +249,12 @@ fun ExpensesScreen(
                 label = { Text("Merchant") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            DatePickerField(
+                value = currentDate,
+                onValueChange = { currentDate = it },
+                label = "Date"
             )
             Spacer(modifier = Modifier.height(8.dp))
             OutlinedTextField(
@@ -306,10 +321,20 @@ fun ExpensesScreen(
                         Text("Category", style = MaterialTheme.typography.labelSmall)
                         Text(receipt.category, style = MaterialTheme.typography.bodyMedium)
                     }
-                    Column {
-                        Text("Date", style = MaterialTheme.typography.labelSmall)
-                        Text(receipt.date, style = MaterialTheme.typography.bodyMedium)
-                    }
+                Column {
+                    Text("Date", style = MaterialTheme.typography.labelSmall)
+                    Text(receipt.date, style = MaterialTheme.typography.bodyMedium)
+                }
+                Column {
+                    Text("Created", style = MaterialTheme.typography.labelSmall)
+                    Text(
+                        java.time.Instant.ofEpochMilli(receipt.createdAt)
+                            .atZone(ZoneId.systemDefault())
+                            .toLocalDate()
+                            .format(DateTimeFormatter.ofPattern("MMM dd, yyyy")),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
                 }
                 receipt.notes?.let {
                     Spacer(modifier = Modifier.height(8.dp))

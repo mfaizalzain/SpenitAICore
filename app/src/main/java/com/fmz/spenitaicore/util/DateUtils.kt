@@ -38,6 +38,12 @@ object DateUtils {
         return today.minusDays(daysSinceWeekStart.toLong()).format(isoFormatter)
     }
 
+    fun daysAgoMillis(days: Long): Long =
+        LocalDate.now().minusDays(days).atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli()
+
+    fun startOfYearMillis(year: Int): Long =
+        LocalDate.of(year, 1, 1).atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli()
+
     fun getGreetingKey(hour: Int = java.time.LocalTime.now().hour): String = when (hour) {
         in 5..11 -> "GreetingMorning"
         in 12..17 -> "GreetingAfternoon"

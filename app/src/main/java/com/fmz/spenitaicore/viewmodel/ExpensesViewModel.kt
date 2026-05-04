@@ -110,13 +110,13 @@ class ExpensesViewModel : ViewModel() {
 
     private suspend fun fetchAsync() {
         currency = preferences.getDefaultCurrency()
-        val from = when (_selectedPeriod.value) {
-            "Last90" -> DateUtils.daysAgo(90)
-            "ThisYear" -> DateUtils.startOfYear(DateUtils.todayLocalDate().year)
+        val fromMillis = when (_selectedPeriod.value) {
+            "Last90" -> DateUtils.daysAgoMillis(90)
+            "ThisYear" -> DateUtils.startOfYearMillis(DateUtils.todayLocalDate().year)
             "All" -> null
-            else -> DateUtils.daysAgo(30)
+            else -> DateUtils.daysAgoMillis(30)
         }
-        allReceipts = receiptRepo.getReceiptsFromSync(from)
+        allReceipts = receiptRepo.getReceiptsByCreatedAtFromSync(fromMillis)
         refreshTaxYears()
         applyFilters()
     }
@@ -293,7 +293,7 @@ class ExpensesViewModel : ViewModel() {
         _editingReceipt.value = null
     }
 
-    fun saveEdit(merchant: String, amountText: String, category: String, notes: String) {
+    fun saveEdit(merchant: String, amountText: String, category: String, notes: String, date: String) {
         viewModelScope.launch {
             val receipt = _editingReceipt.value ?: return@launch
             val amount = amountText.toDoubleOrNull()
@@ -303,7 +303,8 @@ class ExpensesViewModel : ViewModel() {
                 merchant = merchant.trim(),
                 total = amount,
                 category = category.ifBlank { "General" },
-                notes = notes.trim().ifBlank { null }
+                notes = notes.trim().ifBlank { null },
+                date = date
             )
             receiptRepo.saveReceipt(updated)
             _isEditVisible.value = false
