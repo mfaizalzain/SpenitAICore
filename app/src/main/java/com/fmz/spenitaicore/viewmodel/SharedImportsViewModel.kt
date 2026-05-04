@@ -13,11 +13,11 @@ import com.fmz.spenitaicore.data.db.entity.SharedImportKind
 import com.fmz.spenitaicore.data.db.entity.SharedImportStatus
 import com.fmz.spenitaicore.util.DateUtils
 import com.fmz.spenitaicore.util.PendingSharedFiles
+import com.fmz.spenitaicore.util.FileUtils
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
-import java.io.File
-import java.time.LocalDate
-import java.time.format.DateTimeFormatter
+import kotlinx.coroutines.withContext
 import java.util.UUID
 
 class SharedImportsViewModel : ViewModel() {
@@ -73,6 +73,29 @@ class SharedImportsViewModel : ViewModel() {
         _imports.value = _imports.value + newItems
         refreshSummary()
         classifyImports(newItems)
+    }
+
+    fun addFileUris(uris: List<Uri>) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val newItems = uris.mapNotNull { uri ->
+                val localFile = FileUtils.copySharedFileToCache(appContext, uri) ?: return@mapNotNull null
+                val displayName = FileUtils.getDisplayName(appContext, uri) ?: localFile.name
+                SharedImportItem(
+                    id = UUID.randomUUID().toString(),
+                    filePath = localFile.absolutePath,
+                    displayName = displayName,
+                    kind = SharedImportKind.Unknown,
+                    status = SharedImportStatus.NeedsReview
+                )
+            }
+            if (newItems.isNotEmpty()) {
+                withContext(Dispatchers.Main) {
+                    _imports.value = _imports.value + newItems
+                    refreshSummary()
+                    classifyImports(newItems)
+                }
+            }
+        }
     }
 
     fun setImportKind(item: SharedImportItem, kind: SharedImportKind) {
@@ -219,10 +242,6 @@ class SharedImportsViewModel : ViewModel() {
     }
 
     private suspend fun importBankStatement(item: SharedImportItem, currency: String): ImportResult {
-        if (item.filePath.endsWith(".csv", ignoreCase = true) || item.displayName.endsWith(".csv", ignoreCase = true)) {
-            return importBankStatementCsv(item, currency)
-        }
-
         val result = aiCore.extractBankStatementData(item.filePath, currency)
             ?: return ImportResult.failure("Could not extract bank statement data")
 
@@ -234,6 +253,7 @@ class SharedImportsViewModel : ViewModel() {
         val receiptIds = mutableListOf<Int>()
         var duplicateCount = 0
         result.transactions.forEach { transaction ->
+            if (transaction.amount == 0.0) return@forEach
             val date = transaction.date.ifBlank { DateUtils.today() }
             if (transaction.type.equals("credit", ignoreCase = true) || transaction.amount > 0) {
                 val entry = IncomeEntry(
@@ -273,109 +293,6 @@ class SharedImportsViewModel : ViewModel() {
             ImportResult.duplicate("All $duplicateCount transaction(s) already exist")
         } else {
             ImportResult.failure("No importable transactions found")
-        }
-    }
-
-    private suspend fun importBankStatementCsv(item: SharedImportItem, currency: String): ImportResult {
-        val rows = readCsvRows(item.filePath)
-        if (rows.size < 2) {
-            return ImportResult.failure("CSV bank statement has no transaction rows")
-        }
-
-        val headers = rows.first().map { it.normalizedHeader() }
-        val dataRows = rows.drop(1)
-        val incomeIds = mutableListOf<Int>()
-        val receiptIds = mutableListOf<Int>()
-        var duplicateCount = 0
-
-        dataRows.forEach { row ->
-            if (row.all { it.isBlank() }) return@forEach
-
-            val date = valueFor(row, headers, "date", "transactiondate", "postingdate", "valuedate")
-                .normalizeCsvDate()
-            val description = valueFor(
-                row,
-                headers,
-                "description",
-                "details",
-                "narration",
-                "particulars",
-                "reference",
-                "transactiondescription"
-            ).ifBlank { item.displayName }
-
-            val credit = amountFor(row, headers, "credit", "deposit", "moneyin", "paidin", "inflow")
-            val debit = amountFor(row, headers, "debit", "withdrawal", "moneyout", "paidout", "outflow")
-            val amount = signedAmountFor(row, headers, "amount", "transactionamount")
-
-            when {
-                credit != null && credit > 0.0 -> {
-                    val entry = IncomeEntry(
-                            source = description,
-                            category = "Other Income",
-                            amount = credit,
-                            currency = currency,
-                            date = date,
-                            notes = "Imported from ${item.displayName}",
-                            isFromBankImport = true
-                        )
-                    val savedId = saveIncomeIfNotDuplicate(entry)
-                    if (savedId == null) duplicateCount++ else incomeIds += savedId
-                }
-                debit != null && debit > 0.0 -> {
-                    val receipt = Receipt(
-                            merchant = description,
-                            date = date,
-                            total = debit,
-                            currency = currency,
-                            category = "General",
-                            imagePath = item.filePath,
-                            notes = "Imported from ${item.displayName}"
-                        )
-                    val savedId = saveReceiptIfNotDuplicate(receipt)
-                    if (savedId == null) duplicateCount++ else receiptIds += savedId
-                }
-                amount != null && amount != 0.0 -> {
-                    if (amount > 0.0) {
-                        val entry = IncomeEntry(
-                                source = description,
-                                category = "Other Income",
-                                amount = amount,
-                                currency = currency,
-                                date = date,
-                                notes = "Imported from ${item.displayName}",
-                                isFromBankImport = true
-                            )
-                        val savedId = saveIncomeIfNotDuplicate(entry)
-                        if (savedId == null) duplicateCount++ else incomeIds += savedId
-                    } else {
-                        val receipt = Receipt(
-                                merchant = description,
-                                date = date,
-                                total = kotlin.math.abs(amount),
-                                currency = currency,
-                                category = "General",
-                                imagePath = item.filePath,
-                                notes = "Imported from ${item.displayName}"
-                            )
-                        val savedId = saveReceiptIfNotDuplicate(receipt)
-                        if (savedId == null) duplicateCount++ else receiptIds += savedId
-                    }
-                }
-            }
-        }
-
-        val importedCount = incomeIds.size + receiptIds.size
-        return if (importedCount > 0) {
-            ImportResult.success(
-                buildImportMessage(importedCount, duplicateCount, "CSV transaction(s)"),
-                receiptIds = receiptIds,
-                incomeEntryIds = incomeIds
-            )
-        } else if (duplicateCount > 0) {
-            ImportResult.duplicate("All $duplicateCount CSV transaction(s) already exist")
-        } else {
-            ImportResult.failure("No importable CSV transactions found")
         }
     }
 
@@ -448,101 +365,6 @@ class SharedImportsViewModel : ViewModel() {
             SharedImportKind.BankStatement -> "Bank Statement"
             SharedImportKind.Unknown -> "Unknown"
         }
-    }
-
-    private fun readCsvRows(path: String): List<List<String>> {
-        return readTextFromPath(path).lineSequence()
-            .filter { it.isNotBlank() }
-            .map { it.parseCsvLine() }
-            .toList()
-    }
-
-    private fun readTextFromPath(path: String): String {
-        return if (path.startsWith("content://") || path.startsWith("file://")) {
-            appContext.contentResolver.openInputStream(Uri.parse(path))?.bufferedReader()?.use { it.readText() }
-                ?: ""
-        } else {
-            File(path).readText()
-        }
-    }
-
-    private fun String.parseCsvLine(): List<String> {
-        val cells = mutableListOf<String>()
-        val current = StringBuilder()
-        var inQuotes = false
-        var index = 0
-        while (index < length) {
-            val char = this[index]
-            when {
-                char == '"' && inQuotes && getOrNull(index + 1) == '"' -> {
-                    current.append('"')
-                    index++
-                }
-                char == '"' -> inQuotes = !inQuotes
-                char == ',' && !inQuotes -> {
-                    cells += current.toString().trim()
-                    current.clear()
-                }
-                else -> current.append(char)
-            }
-            index++
-        }
-        cells += current.toString().trim()
-        return cells
-    }
-
-    private fun valueFor(row: List<String>, headers: List<String>, vararg names: String): String {
-        val index = headers.indexOfFirst { it in names }
-        return if (index >= 0) row.getOrNull(index).orEmpty().trim() else ""
-    }
-
-    private fun amountFor(row: List<String>, headers: List<String>, vararg names: String): Double? {
-        return valueFor(row, headers, *names).parseCsvAmount()?.let { kotlin.math.abs(it) }
-    }
-
-    private fun signedAmountFor(row: List<String>, headers: List<String>, vararg names: String): Double? {
-        return valueFor(row, headers, *names).parseCsvAmount()
-    }
-
-    private fun String.normalizedHeader(): String {
-        return lowercase().replace(Regex("[^a-z0-9]"), "")
-    }
-
-    private fun String.parseCsvAmount(): Double? {
-        val cleaned = replace(Regex("[^0-9,\\.\\-()]"), "")
-            .replace("(", "-")
-            .replace(")", "")
-            .trim(',', '.')
-            .ifBlank { return null }
-        val lastComma = cleaned.lastIndexOf(',')
-        val lastDot = cleaned.lastIndexOf('.')
-        val normalized = when {
-            lastComma >= 0 && lastDot >= 0 && lastComma > lastDot -> cleaned.replace(".", "").replace(",", ".")
-            lastComma >= 0 && lastDot >= 0 -> cleaned.replace(",", "")
-            lastComma >= 0 && cleaned.length - lastComma - 1 == 2 -> cleaned.replace(",", ".")
-            else -> cleaned.replace(",", "")
-        }
-        return normalized.toDoubleOrNull()
-    }
-
-    private fun String.normalizeCsvDate(): String {
-        val raw = trim()
-        if (raw.isBlank()) return DateUtils.today()
-        val formatters = listOf(
-            DateTimeFormatter.ISO_LOCAL_DATE,
-            DateTimeFormatter.ofPattern("dd/MM/yyyy"),
-            DateTimeFormatter.ofPattern("MM/dd/yyyy"),
-            DateTimeFormatter.ofPattern("dd-MM-yyyy"),
-            DateTimeFormatter.ofPattern("MM-dd-yyyy"),
-            DateTimeFormatter.ofPattern("dd MMM yyyy"),
-            DateTimeFormatter.ofPattern("MMM dd yyyy")
-        )
-        for (formatter in formatters) {
-            try {
-                return LocalDate.parse(raw, formatter).toString()
-            } catch (_: Exception) { }
-        }
-        return raw
     }
 
     private data class ImportResult(

@@ -82,9 +82,6 @@ class AiCoreService(
 
     suspend fun classifyFinancialDocument(imagePath: String): FinancialDocumentType {
         Log.d("AiCoreService", "Starting document classification for: $imagePath")
-        val lowerPath = imagePath.lowercase()
-        if (lowerPath.endsWith(".csv")) return FinancialDocumentType.BankStatement
-
         return try {
             val bitmap = loadBitmapFromPath(imagePath) ?: return FinancialDocumentType.Unknown
             val model = getAvailableModel() ?: return FinancialDocumentType.Unknown
@@ -263,15 +260,56 @@ class AiCoreService(
     ): BankStatementResult? {
         Log.d("AiCoreService", "Starting bank statement extraction for: $imagePath")
         return try {
-            val bitmap = loadBitmapFromPath(imagePath) ?: return null
             val model = getAvailableModel() ?: return null
 
+            val bitmaps: List<Bitmap> = withContext(Dispatchers.IO) {
+                if (isPdfInput(imagePath)) loadPdfPages(imagePath)
+                else loadImageBitmap(imagePath)?.let { listOf(it) } ?: emptyList()
+            }
+            if (bitmaps.isEmpty()) {
+                Log.w("AiCoreService", "No bitmaps loaded from $imagePath")
+                return null
+            }
+
+            var bankName = ""
+            var accountLast4 = ""
+            var period = ""
+            val allTransactions = mutableListOf<BankTransaction>()
+
+            for ((index, bitmap) in bitmaps.withIndex()) {
+                Log.d("AiCoreService", "Processing page ${index + 1}/${bitmaps.size}")
+                val pageResult = extractPageTransactions(model, bitmap) ?: continue
+                if (bankName.isEmpty()) bankName = pageResult.bankName
+                if (accountLast4.isEmpty()) accountLast4 = pageResult.accountLast4
+                if (period.isEmpty()) period = pageResult.period
+                allTransactions += pageResult.transactions
+            }
+
+            Log.d("AiCoreService", "Total transactions extracted: ${allTransactions.size}")
+            BankStatementResult(
+                bankName = bankName,
+                accountLast4 = accountLast4,
+                period = period,
+                transactions = allTransactions
+            )
+        } catch (e: Exception) {
+            Log.e("AiCoreService", "Bank statement extraction error", e)
+            null
+        }
+    }
+
+    private suspend fun extractPageTransactions(
+        model: GenerativeModel,
+        bitmap: Bitmap
+    ): BankStatementResult? {
+        return try {
             val prompt = """
-                Look at this bank statement image. Extract ALL transactions visible.
-                For each transaction, extract: date (YYYY-MM-DD), description, amount (positive for credit/income, negative for debit/expense), amountText (the exact visible amount), and type ("credit" or "debit").
-                Also extract: bank name, account number (last 4 digits only), statement period.
-                Do not use running balance, opening balance, closing balance, or available balance as the transaction amount.
-                Return ONLY JSON: {"bankName":"...","accountLast4":"...","period":"...","transactions":[{"date":"YYYY-MM-DD","description":"...","amount":0.0,"amountText":"...","type":"debit"}]}
+                This is a bank statement page. Extract every individual transaction row visible.
+                For each row extract: date (YYYY-MM-DD), description, amount as a signed number (negative for debit/withdrawal/payment, positive for credit/deposit/income), amountText (exact digits shown), type ("credit" or "debit").
+                Also extract bankName, accountLast4, period if visible on this page.
+                Ignore opening balance, closing balance, running balance, available balance — those are not transactions.
+                Return ONLY valid JSON (no markdown):
+                {"bankName":"Maybank","accountLast4":"1234","period":"Jan 2025","transactions":[{"date":"2025-01-03","description":"Salary Payment","amount":3500.00,"amountText":"3,500.00","type":"credit"},{"date":"2025-01-05","description":"Grocery Store","amount":-62.40,"amountText":"62.40","type":"debit"}]}
             """.trimIndent()
 
             val request = GenerateContentRequest.Builder(
@@ -284,26 +322,20 @@ class AiCoreService(
                 ?.replace("```json", "")?.replace("```", "")?.trim()
                 ?: return null
 
-            Log.d("AiCoreService", "Bank statement JSON: ${jsonStr.take(200)}...")
+            Log.d("AiCoreService", "Page JSON (first 300): ${jsonStr.take(300)}")
             val jsonElement = parseFirstJsonElement(jsonStr) ?: return null
             val jsonObj = jsonElement as? JsonObject
             val transactionElements = when (jsonElement) {
                 is JsonArray -> jsonElement
                 is JsonObject -> jsonElement.arrayValue(
-                    "transactions",
-                    "transaction",
-                    "entries",
-                    "rows",
-                    "items",
-                    "statementLines",
-                    "statement lines"
+                    "transactions", "transaction", "entries", "rows", "items", "statementLines"
                 )
                 else -> null
             }
 
             val transactions = transactionElements?.mapNotNull { element ->
                 (element as? JsonObject)?.toBankTransaction()
-            } ?: emptyList()
+            }?.filter { it.amount != 0.0 } ?: emptyList()
 
             BankStatementResult(
                 bankName = jsonObj?.stringValue("bankName", "bank name", "bank").orEmpty(),
@@ -312,8 +344,43 @@ class AiCoreService(
                 transactions = transactions
             )
         } catch (e: Exception) {
-            Log.e("AiCoreService", "Bank statement extraction error", e)
+            Log.e("AiCoreService", "Page extraction error", e)
             null
+        }
+    }
+
+    private fun loadPdfPages(pdfPath: String): List<Bitmap> {
+        val pages = mutableListOf<Bitmap>()
+        return try {
+            val fd = when {
+                pdfPath.startsWith("content://") ->
+                    context.contentResolver.openFileDescriptor(Uri.parse(pdfPath), "r") ?: return emptyList()
+                pdfPath.startsWith("file://") -> {
+                    val path = Uri.parse(pdfPath).path ?: return emptyList()
+                    ParcelFileDescriptor.open(java.io.File(path), ParcelFileDescriptor.MODE_READ_ONLY)
+                }
+                else -> ParcelFileDescriptor.open(java.io.File(pdfPath), ParcelFileDescriptor.MODE_READ_ONLY)
+            }
+            val renderer = PdfRenderer(fd)
+            val pageCount = minOf(renderer.pageCount, 10)
+            for (i in 0 until pageCount) {
+                val page = renderer.openPage(i)
+                val maxDim = maxOf(page.width, page.height).coerceAtLeast(1)
+                val scale = (2048f / maxDim).coerceIn(1f, 3f)
+                val width = (page.width * scale).toInt().coerceAtLeast(1)
+                val height = (page.height * scale).toInt().coerceAtLeast(1)
+                val bm = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+                Canvas(bm).drawColor(Color.WHITE)
+                page.render(bm, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                page.close()
+                pages += bm
+            }
+            renderer.close()
+            fd.close()
+            pages
+        } catch (e: Exception) {
+            Log.e("AiCoreService", "PDF pages load error", e)
+            pages
         }
     }
 

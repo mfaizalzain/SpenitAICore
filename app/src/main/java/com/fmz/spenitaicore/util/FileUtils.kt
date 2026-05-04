@@ -16,14 +16,14 @@ object FileUtils {
             val mimeType = context.contentResolver.getType(sourceUri)
             val extension = when {
                 mimeType == "application/pdf" -> ".pdf"
-                mimeType == "text/csv" || mimeType == "text/comma-separated-values" -> ".csv"
                 mimeType?.startsWith("image/") == true -> ".jpg"
                 else -> ".bin"
             }
 
             val displayName = getDisplayName(context, sourceUri) ?: "${prefix}_${System.currentTimeMillis()}"
             val safeName = displayName.replace(Regex("[^a-zA-Z0-9._-]"), "_")
-            val destFile = File(context.cacheDir, "${prefix}_${System.currentTimeMillis()}_$safeName$extension")
+            val nameWithoutExt = safeName.substringBeforeLast('.', safeName)
+            val destFile = File(context.cacheDir, "${prefix}_${System.currentTimeMillis()}_$nameWithoutExt$extension")
 
             context.contentResolver.openInputStream(sourceUri)?.use { input ->
                 destFile.outputStream().use { output ->

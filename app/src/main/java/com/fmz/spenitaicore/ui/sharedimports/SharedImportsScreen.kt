@@ -1,6 +1,5 @@
 package com.fmz.spenitaicore.ui.sharedimports
 
-import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
@@ -13,7 +12,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -36,7 +34,6 @@ fun SharedImportsScreen(
     val pendingCount by viewModel.pendingCount.collectAsStateWithLifecycle()
     val isBusy by viewModel.isBusy.collectAsStateWithLifecycle()
     val unclassifiedCount = imports.count { it.kind == SharedImportKind.Unknown }
-    val context = LocalContext.current
 
     LaunchedEffect(pendingImportSignal) {
         if (pendingImportSignal > 0) {
@@ -48,17 +45,7 @@ fun SharedImportsScreen(
         contract = ActivityResultContracts.OpenMultipleDocuments()
     ) { uris ->
         if (uris.isNotEmpty()) {
-            uris.forEach { uri ->
-                try {
-                    context.contentResolver.takePersistableUriPermission(
-                        uri,
-                        Intent.FLAG_GRANT_READ_URI_PERMISSION
-                    )
-                } catch (_: Exception) { }
-            }
-            val paths = uris.map { it.toString() }
-            val names = uris.map { it.lastPathSegment ?: "unknown" }
-            viewModel.addFiles(paths, names)
+            viewModel.addFileUris(uris)
         }
     }
 
@@ -108,7 +95,7 @@ fun SharedImportsScreen(
                         fontWeight = FontWeight.Medium
                     )
                     FilledTonalButton(
-                        onClick = { filePickerLauncher.launch(arrayOf("image/*", "application/pdf", "text/csv")) }
+                        onClick = { filePickerLauncher.launch(arrayOf("image/*", "application/pdf")) }
                     ) {
                         Icon(Icons.Filled.Add, null, Modifier.size(18.dp))
                         Spacer(Modifier.width(4.dp))

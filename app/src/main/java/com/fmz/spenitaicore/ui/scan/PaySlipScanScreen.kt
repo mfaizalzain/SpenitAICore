@@ -1,9 +1,14 @@
 package com.fmz.spenitaicore.ui.scan
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.provider.MediaStore
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -19,13 +24,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
-import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.fmz.spenitaicore.data.db.entity.IncomeSources
 import com.fmz.spenitaicore.ui.components.CompactTopAppBar
 import com.fmz.spenitaicore.ui.components.DatePickerField
 import com.fmz.spenitaicore.viewmodel.ReceiptScanViewModel
-import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -44,26 +47,47 @@ fun PaySlipScanScreen(
     val isBusy by viewModel.isBusy.collectAsStateWithLifecycle()
 
     val context = LocalContext.current
-    var capturedPhotoUri by remember { mutableStateOf<Uri?>(null) }
     var showCategoryDropdown by remember { mutableStateOf(false) }
 
     val cameraLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.TakePicture()
-    ) { success ->
-        if (success && capturedPhotoUri != null) {
-            viewModel.setImage(capturedPhotoUri.toString())
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            val bitmap = result.data?.extras?.get("data") as? android.graphics.Bitmap
+            if (bitmap != null) {
+                try {
+                    val file = java.io.File(context.cacheDir, "payslip_${System.currentTimeMillis()}.jpg")
+                    file.outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 95, it) }
+                    viewModel.setImage(file.absolutePath)
+                } catch (e: Exception) {
+                    android.util.Log.e("PaySlipScan", "Failed to save bitmap", e)
+                }
+            }
+        }
+    }
+
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            cameraLauncher.launch(Intent(MediaStore.ACTION_IMAGE_CAPTURE))
+        } else {
+            Toast.makeText(context, "Camera permission is required to take photos", Toast.LENGTH_LONG).show()
         }
     }
 
     fun launchCamera() {
         try {
-            val file = File(context.cacheDir, "payslip_${System.currentTimeMillis()}.jpg")
-            file.createNewFile()
-            val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-            capturedPhotoUri = uri
-            cameraLauncher.launch(uri)
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA)
+                == PackageManager.PERMISSION_GRANTED
+            ) {
+                cameraLauncher.launch(Intent(MediaStore.ACTION_IMAGE_CAPTURE))
+            } else {
+                cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+            }
         } catch (e: Exception) {
-            e.printStackTrace()
+            android.util.Log.e("PaySlipScan", "Camera launch failed", e)
+            Toast.makeText(context, "${e.javaClass.simpleName}", Toast.LENGTH_LONG).show()
         }
     }
 
