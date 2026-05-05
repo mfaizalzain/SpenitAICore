@@ -134,10 +134,17 @@ class AiCoreService(
                 Rules:
                 1. merchant: The name of the store or business.
                 2. date: Transaction date in YYYY-MM-DD format.
+                   IMPORTANT - Handle date format ambiguity:
+                   - Receipts usually show day first (DD/MM/YYYY or DD-MM-YYYY), especially outside US
+                   - Look at the date: if day value > 12, it's definitely DD/MM format
+                   - If month value > 12, it's definitely MM/DD format
+                   - Textual dates like "15 Jan 2025" or "Jan 15, 2025" are unambiguous - use the text
+                   - When ambiguous (both day and month ≤ 12), prefer DD/MM/YYYY for non-US receipts
+                   - Examples: "15/03/2025" → "2025-03-15", "03/15/2025" (US) → "2025-03-15", "01/02/2025" → prefer "2025-02-01"
                 3. total: The total amount paid as a number.
                 4. tax: The tax amount as a number.
                 5. category: Best match from this list: [${ExpensesViewModel.SPENDING_CATEGORIES.joinToString(", ")}].
-                
+
                 Return ONLY a valid JSON object in exactly this format, with no markdown formatting and no extra text:
                 {"merchant":"...","date":"...","total":0.0,"currency":"$currency","category":"General","taxAmount":0.0}
             """.trimIndent()
@@ -193,15 +200,21 @@ class AiCoreService(
 
             val prompt = """
                 Analyze this income document (pay slip or bank statement).
-                
+
                 Rules for extraction:
                 1. employer: Name of the company, payer, or source.
                 2. netPay: For pay slips, use net pay, take-home pay, or amount paid. For bank statements, use the amount from one credit/deposit/money-in transaction row (not the running balance). Must be a positive number. Return 0.0 if not found.
                 3. netPayText: The exact text of the netPay amount, including all commas and decimals (e.g. "10,412.51").
                 4. date: Date in YYYY-MM-DD format. Use "${DateUtils.today()}" if cannot be read.
+                   IMPORTANT - Handle date format ambiguity:
+                   - Payslips usually show day first (DD/MM/YYYY), especially outside US
+                   - Look for context: if pay period shows "01/01/2025 - 31/01/2025", it's DD/MM format
+                   - If day value > 12 in any date, it's definitely DD/MM format
+                   - Textual dates like "15 Jan 2025" are unambiguous
+                   - When ambiguous (both ≤ 12), prefer DD/MM/YYYY for non-US documents
                 5. category: Best match from: ${IncomeSources.All.joinToString(", ")}.
                 6. notes: Any additional reason or description.
-                
+
                 Return ONLY a valid JSON object in exactly this format, with no markdown formatting and no extra text:
                 {"employer":"...","netPay":0.0,"netPayText":"...","date":"YYYY-MM-DD","category":"Salary","notes":"..."}
             """.trimIndent()
@@ -342,14 +355,32 @@ class AiCoreService(
                    - Header rows with column names only
 
                 3. DATE EXTRACTION (convert to YYYY-MM-DD):
-                   Handle these common formats:
-                   - DD/MM/YYYY or DD-MM-YYYY → convert to YYYY-MM-DD
-                   - MM/DD/YYYY or MM-DD-YYYY → convert to YYYY-MM-DD
+                   CRITICAL: Determine the date format used by the bank statement first, then parse consistently.
+
+                   STEP 1 - Identify the date format by looking for clues:
+                   - Check the statement period/header for format hints (e.g., "Statement Period: 01/01/2025 - 31/01/2025" suggests DD/MM/YYYY)
+                   - Look at multiple transaction dates to identify the pattern
+                   - If day values exceed 12 (e.g., "15/03/2025"), it's definitely DD/MM/YYYY
+                   - If month values exceed 12 (e.g., "03/15/2025"), it's definitely MM/DD/YYYY
+                   - Malaysian/Singapore/UK/Australian banks typically use DD/MM/YYYY
+                   - US banks typically use MM/DD/YYYY
+
+                   STEP 2 - Parse based on identified format:
+                   - DD/MM/YYYY or DD-MM-YYYY (day first) → convert to YYYY-MM-DD
+                   - MM/DD/YYYY or MM-DD-YYYY (month first) → convert to YYYY-MM-DD
                    - YYYY/MM/DD or YYYY-MM-DD → keep as is
                    - DD MMM YYYY (e.g., "15 Jan 2025") → convert to YYYY-MM-DD
                    - MMM DD, YYYY (e.g., "Jan 15, 2025") → convert to YYYY-MM-DD
-                   - DD/MM/YY → assume 20YY and convert to YYYY-MM-DD
-                   If year is missing, use the statement period year or current year.
+                   - DD/MM/YY or MM/DD/YY → assume 20YY and convert to YYYY-MM-DD
+
+                   STEP 3 - Validation:
+                   - If parsed day > 31 or month > 12, you may have misidentified the format - try the alternative
+                   - If year is missing, use the statement period year
+
+                   EXAMPLES:
+                   - "15/03/2025" in DD/MM format → "2025-03-15"
+                   - "03/15/2025" in MM/DD format → "2025-03-15"
+                   - "01/02/2025" - Use context: if other dates have days > 12, use DD/MM → "2025-02-01"
 
                 4. DESCRIPTION EXTRACTION:
                    Look for fields labeled as: Description, Narration, Particulars, Reference, Transaction Details, Remarks, Payee, Counterparty, Merchant
