@@ -137,16 +137,44 @@ fun SpenItNavHost(
                 SettingsScreen(viewModel = settingsViewModel)
             }
 
-            composable("receipt_scan") {
+            composable(
+                "receipt_scan?receiptId={receiptId}",
+                arguments = listOf(
+                    navArgument("receiptId") {
+                        type = NavType.IntType
+                        defaultValue = 0
+                    }
+                )
+            ) { backStackEntry ->
+                val receiptId = backStackEntry.arguments?.getInt("receiptId") ?: 0
                 val scanViewModel = remember { ReceiptScanViewModel() }
+                if (receiptId > 0) {
+                    LaunchedEffect(receiptId) {
+                        scanViewModel.prepareEdit(receiptId)
+                    }
+                }
                 ReceiptScanScreen(
                     viewModel = scanViewModel,
                     onNavigateBack = { navController.popBackStack() }
                 )
             }
 
-            composable("payslip_scan") {
+            composable(
+                "payslip_scan?incomeEntryId={incomeEntryId}",
+                arguments = listOf(
+                    navArgument("incomeEntryId") {
+                        type = NavType.IntType
+                        defaultValue = 0
+                    }
+                )
+            ) { backStackEntry ->
+                val incomeEntryId = backStackEntry.arguments?.getInt("incomeEntryId") ?: 0
                 val scanViewModel = remember { ReceiptScanViewModel(isIncome = true) }
+                if (incomeEntryId > 0) {
+                    LaunchedEffect(incomeEntryId) {
+                        scanViewModel.prepareEdit(incomeEntryId)
+                    }
+                }
                 PaySlipScanScreen(
                     viewModel = scanViewModel,
                     onNavigateBack = { navController.popBackStack() }
@@ -158,7 +186,13 @@ fun SpenItNavHost(
                 SharedImportsScreen(
                     viewModel = sharedImportsViewModel,
                     pendingImportSignal = sharedImportSignal,
-                    onNavigateBack = { navController.popBackStack() }
+                    onNavigateBack = { navController.popBackStack() },
+                    onNavigateToEditReceipt = { receiptId ->
+                        navController.navigate("receipt_scan?receiptId=$receiptId")
+                    },
+                    onNavigateToEditIncome = { incomeEntryId ->
+                        navController.navigate("payslip_scan?incomeEntryId=$incomeEntryId")
+                    }
                 )
             }
         }

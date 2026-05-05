@@ -365,6 +365,49 @@ class SharedImportsViewModel : ViewModel() {
         }
     }
 
+    private val _navigateToEdit = MutableStateFlow<EditNavigation?>(null)
+    val navigateToEdit: StateFlow<EditNavigation?> = _navigateToEdit
+
+    fun onCompletedItemClick(item: SharedImportItem) {
+        when (item.kind) {
+            SharedImportKind.ExpenseReceipt -> {
+                if (item.linkedReceiptId > 0) {
+                    _navigateToEdit.value = EditNavigation.Receipt(item.linkedReceiptId)
+                }
+            }
+            SharedImportKind.Income -> {
+                if (item.linkedIncomeEntryId > 0) {
+                    _navigateToEdit.value = EditNavigation.Income(item.linkedIncomeEntryId)
+                }
+            }
+            SharedImportKind.BankStatement -> {
+                // For bank statements, show a dialog to choose which entry to edit
+                val receiptIds = item.linkedReceiptIds
+                val incomeIds = item.linkedIncomeEntryIds
+                if (receiptIds.isNotEmpty() || incomeIds.isNotEmpty()) {
+                    _navigateToEdit.value = EditNavigation.BankStatement(
+                        receiptIds = receiptIds,
+                        incomeEntryIds = incomeIds
+                    )
+                }
+            }
+            SharedImportKind.Unknown -> { /* Do nothing */ }
+        }
+    }
+
+    fun onEditNavigationHandled() {
+        _navigateToEdit.value = null
+    }
+
+    sealed class EditNavigation {
+        data class Receipt(val receiptId: Int) : EditNavigation()
+        data class Income(val incomeEntryId: Int) : EditNavigation()
+        data class BankStatement(
+            val receiptIds: List<Int> = emptyList(),
+            val incomeEntryIds: List<Int> = emptyList()
+        ) : EditNavigation()
+    }
+
     private fun SharedImportKind.displayName(): String {
         return when (this) {
             SharedImportKind.ExpenseReceipt -> "Expense"

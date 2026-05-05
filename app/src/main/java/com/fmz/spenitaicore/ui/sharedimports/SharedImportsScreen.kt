@@ -22,18 +22,91 @@ import com.fmz.spenitaicore.data.db.entity.SharedImportStatus
 import com.fmz.spenitaicore.ui.components.CompactTopAppBar
 import com.fmz.spenitaicore.viewmodel.SharedImportsViewModel
 import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.clickable
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SharedImportsScreen(
     viewModel: SharedImportsViewModel,
     pendingImportSignal: Int = 0,
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit,
+    onNavigateToEditReceipt: (Int) -> Unit = {},
+    onNavigateToEditIncome: (Int) -> Unit = {}
 ) {
     val imports by viewModel.imports.collectAsStateWithLifecycle()
     val pendingCount by viewModel.pendingCount.collectAsStateWithLifecycle()
     val isBusy by viewModel.isBusy.collectAsStateWithLifecycle()
+    val navigateToEdit by viewModel.navigateToEdit.collectAsStateWithLifecycle()
     val unclassifiedCount = imports.count { it.kind == SharedImportKind.Unknown }
+
+    // Handle navigation to edit
+    var showBankStatementDialog by remember { mutableStateOf<SharedImportsViewModel.EditNavigation.BankStatement?>(null) }
+
+    LaunchedEffect(navigateToEdit) {
+        when (val nav = navigateToEdit) {
+            is SharedImportsViewModel.EditNavigation.Receipt -> {
+                onNavigateToEditReceipt(nav.receiptId)
+                viewModel.onEditNavigationHandled()
+            }
+            is SharedImportsViewModel.EditNavigation.Income -> {
+                onNavigateToEditIncome(nav.incomeEntryId)
+                viewModel.onEditNavigationHandled()
+            }
+            is SharedImportsViewModel.EditNavigation.BankStatement -> {
+                showBankStatementDialog = nav
+                viewModel.onEditNavigationHandled()
+            }
+            null -> { /* Do nothing */ }
+        }
+    }
+
+    // Bank Statement dialog for choosing which entry to edit
+    showBankStatementDialog?.let { bankNav ->
+        AlertDialog(
+            onDismissRequest = { showBankStatementDialog = null },
+            title = { Text("View Imported Transactions") },
+            text = {
+                Column {
+                    Text("This bank statement was imported as multiple entries. Select one to view/edit:")
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    if (bankNav.incomeEntryIds.isNotEmpty()) {
+                        Text("Income Entries:", fontWeight = FontWeight.Medium)
+                        bankNav.incomeEntryIds.forEach { id ->
+                            TextButton(
+                                onClick = {
+                                    showBankStatementDialog = null
+                                    onNavigateToEditIncome(id)
+                                }
+                            ) {
+                                Text("Income #$id")
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+                    
+                    if (bankNav.receiptIds.isNotEmpty()) {
+                        Text("Expense Entries:", fontWeight = FontWeight.Medium)
+                        bankNav.receiptIds.forEach { id ->
+                            TextButton(
+                                onClick = {
+                                    showBankStatementDialog = null
+                                    onNavigateToEditReceipt(id)
+                                }
+                            ) {
+                                Text("Expense #$id")
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showBankStatementDialog = null }) {
+                    Text("Close")
+                }
+            }
+        )
+    }
 
     LaunchedEffect(pendingImportSignal) {
         if (pendingImportSignal > 0) {
@@ -146,7 +219,7 @@ fun SharedImportsScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("\uD83D\uDCE5", style = MaterialTheme.typography.displayMedium)
+                        Text("📥", style = MaterialTheme.typography.displayMedium)
                         Spacer(modifier = Modifier.height(12.dp))
                         Text("No files to import",
                             style = MaterialTheme.typography.bodyLarge,
@@ -170,7 +243,8 @@ fun SharedImportsScreen(
                             onRemove = { viewModel.removeImport(item) },
                             onMarkExpense = { viewModel.setImportKind(item, SharedImportKind.ExpenseReceipt) },
                             onMarkIncome = { viewModel.setImportKind(item, SharedImportKind.Income) },
-                            onMarkBank = { viewModel.setImportKind(item, SharedImportKind.BankStatement) }
+                            onMarkBank = { viewModel.setImportKind(item, SharedImportKind.BankStatement) },
+                            onViewCompleted = { viewModel.onCompletedItemClick(item) }
                         )
                     }
                     item { Spacer(modifier = Modifier.height(16.dp)) }
@@ -188,14 +262,26 @@ fun ImportItemCard(
     onRemove: () -> Unit,
     onMarkExpense: () -> Unit,
     onMarkIncome: () -> Unit,
-    onMarkBank: () -> Unit
+    onMarkBank: () -> Unit,
+    onViewCompleted: () -> Unit
 ) {
     var showKindMenu by remember { mutableStateOf(false) }
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(
+                if (item.isCompleted) {
+                    Modifier.clickable(onClick = onViewCompleted)
+                } else {
+                    Modifier
+                }
+            ),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            containerColor = when {
+                item.isCompleted -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            }
         )
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
@@ -249,7 +335,7 @@ fun ImportItemCard(
                             when (item.status) {
                                 SharedImportStatus.NeedsReview -> "Needs Review"
                                 SharedImportStatus.Processing -> "Processing"
-                                SharedImportStatus.Completed -> "Done"
+                                SharedImportStatus.Completed -> "Tap to view/edit"
                                 SharedImportStatus.Failed -> "Failed"
                                 SharedImportStatus.Skipped -> "Skipped"
                                 SharedImportStatus.InQueue -> "Queued"
@@ -278,7 +364,7 @@ fun ImportItemCard(
                         }
                     }
                     if (item.isCompleted) {
-                        Icon(Icons.Filled.CheckCircle, "Done",
+                        Icon(Icons.Filled.OpenInNew, "View",
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(20.dp))
                     }
