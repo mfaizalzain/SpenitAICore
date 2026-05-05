@@ -110,18 +110,23 @@ class SharedImportsViewModel : ViewModel() {
             viewModelScope.launch {
                 setStatusMessage(item.id, "Classifying...")
                 val kind = aiCore.classifyFinancialDocument(item.filePath).toSharedImportKind()
+                val updatedItem = if (kind == SharedImportKind.Unknown) {
+                    item.copy(statusMessage = "Choose a type to import")
+                } else {
+                    item.copy(kind = kind, statusMessage = "Detected ${kind.displayName()}")
+                }
                 _imports.value = _imports.value.map {
-                    if (it.id == item.id) {
-                        if (kind == SharedImportKind.Unknown) {
-                            it.copy(statusMessage = "Choose a type to import")
-                        } else {
-                            it.copy(kind = kind, statusMessage = "Detected ${kind.displayName()}")
-                        }
-                    } else {
-                        it
-                    }
+                    if (it.id == item.id) updatedItem else it
                 }
                 refreshSummary()
+
+                // Auto-process if classification succeeded
+                if (kind != SharedImportKind.Unknown) {
+                    _imports.value = _imports.value.map {
+                        if (it.id == item.id) it.copy(statusMessage = "Auto-processing ${kind.displayName()}...") else it
+                    }
+                    processImport(updatedItem)
+                }
             }
         }
     }
