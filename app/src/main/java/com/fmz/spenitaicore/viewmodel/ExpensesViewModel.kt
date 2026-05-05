@@ -293,7 +293,15 @@ class ExpensesViewModel : ViewModel() {
         _editingReceipt.value = null
     }
 
-    fun saveEdit(merchant: String, amountText: String, category: String, notes: String, date: String) {
+    fun saveEdit(
+        merchant: String,
+        amountText: String,
+        category: String,
+        notes: String,
+        date: String,
+        isTaxDeductible: Boolean = false,
+        taxCategory: String = ""
+    ) {
         viewModelScope.launch {
             val receipt = _editingReceipt.value ?: return@launch
             val amount = amountText.toDoubleOrNull()
@@ -304,7 +312,10 @@ class ExpensesViewModel : ViewModel() {
                 total = amount,
                 category = category.ifBlank { "General" },
                 notes = notes.trim().ifBlank { null },
-                date = date
+                date = date,
+                isTaxDeductible = isTaxDeductible,
+                taxYear = if (isTaxDeductible) date.substring(0, 4) else null,
+                taxCategory = if (isTaxDeductible) taxCategory.ifBlank { null } else null
             )
             receiptRepo.saveReceipt(updated)
             _isEditVisible.value = false

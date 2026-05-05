@@ -235,7 +235,10 @@ fun ExpensesScreen(
         var currentDate by remember { mutableStateOf(editingReceipt!!.date) }
         var currentCategory by remember { mutableStateOf(editingReceipt!!.category) }
         var currentNotes by remember { mutableStateOf(editingReceipt!!.notes ?: "") }
+        var isTaxDeductible by remember { mutableStateOf(editingReceipt!!.isTaxDeductible) }
+        var taxCategory by remember { mutableStateOf(editingReceipt!!.taxCategory ?: "") }
         var catDropdown by remember { mutableStateOf(false) }
+        var taxCatDropdown by remember { mutableStateOf(false) }
 
         BottomSheetDialog(
             visible = true,
@@ -243,7 +246,15 @@ fun ExpensesScreen(
             title = "Edit Receipt",
             confirmText = "Save",
             onConfirm = {
-                viewModel.saveEdit(currentMerchant, currentAmount, currentCategory, currentNotes, currentDate)
+                viewModel.saveEdit(
+                    merchant = currentMerchant,
+                    amountText = currentAmount,
+                    category = currentCategory,
+                    notes = currentNotes,
+                    date = currentDate,
+                    isTaxDeductible = isTaxDeductible,
+                    taxCategory = taxCategory
+                )
             }
         ) {
             OutlinedTextField(
@@ -293,6 +304,58 @@ fun ExpensesScreen(
                     }
                 }
             }
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Tax Deductible Toggle
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("Tax Deductible", style = MaterialTheme.typography.bodyLarge)
+                Switch(
+                    checked = isTaxDeductible,
+                    onCheckedChange = { isTaxDeductible = it }
+                )
+            }
+
+            if (isTaxDeductible) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Box {
+                    OutlinedTextField(
+                        value = taxCategory,
+                        onValueChange = {},
+                        label = { Text("Tax Category") },
+                        modifier = Modifier.fillMaxWidth(),
+                        readOnly = true,
+                        trailingIcon = {
+                            IconButton(onClick = { taxCatDropdown = true }) {
+                                Icon(Icons.Filled.ArrowDropDown, null)
+                            }
+                        }
+                    )
+                    DropdownMenu(
+                        expanded = taxCatDropdown,
+                        onDismissRequest = { taxCatDropdown = false }
+                    ) {
+                        listOf(
+                            "Business Expense", "Medical & Healthcare", "Parent Care",
+                            "Lifestyle (General)", "Lifestyle (Sports)", "Education (Self)",
+                            "Insurance & EPF", "Charitable Donation", "Housing Loan Interest",
+                            "Zakat / Fitrah", "Other Reliefs"
+                        ).forEach { tc ->
+                            DropdownMenuItem(
+                                text = { Text(tc) },
+                                onClick = {
+                                    taxCategory = tc
+                                    taxCatDropdown = false
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+
             Spacer(modifier = Modifier.height(8.dp))
             OutlinedTextField(
                 value = currentNotes,
