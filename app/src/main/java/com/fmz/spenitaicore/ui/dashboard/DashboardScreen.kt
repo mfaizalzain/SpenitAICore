@@ -77,7 +77,8 @@ fun DashboardScreen(
         floatingActionButton = {
             FloatingActionButton(
                 onClick = onNavigateToScan,
-                containerColor = MaterialTheme.colorScheme.primary
+                containerColor = MaterialTheme.colorScheme.primary,
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)
             ) {
                 Icon(Icons.Filled.Add, contentDescription = "Scan Receipt", tint = MaterialTheme.colorScheme.onPrimary)
             }
@@ -107,7 +108,8 @@ fun DashboardScreen(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.primaryContainer
-                    )
+                    ),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text(
@@ -154,22 +156,35 @@ fun DashboardScreen(
 
             // Quick actions
             item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    ActionChip(
-                        modifier = Modifier.weight(1f),
-                        label = "Scan Receipt",
-                        icon = Icons.Filled.CameraAlt,
-                        onClick = onNavigateToScan
-                    )
-                    ActionChip(
-                        modifier = Modifier.weight(1f),
-                        label = "Add Income",
-                        icon = Icons.Filled.TrendingUp,
-                        onClick = onNavigateToPaySlipScan
-                    )
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        ActionChip(
+                            modifier = Modifier.weight(1f),
+                            label = "Scan Receipt",
+                            icon = Icons.Filled.CameraAlt,
+                            onClick = onNavigateToScan
+                        )
+                        ActionChip(
+                            modifier = Modifier.weight(1f),
+                            label = "Add Income",
+                            icon = Icons.Filled.TrendingUp,
+                            onClick = onNavigateToPaySlipScan
+                        )
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        ActionChip(
+                            modifier = Modifier.weight(1f),
+                            label = "Import Bank Statement",
+                            icon = Icons.Filled.AccountBalance,
+                            onClick = onNavigateToSharedImports
+                        )
+                    }
                 }
             }
 
@@ -198,7 +213,8 @@ fun DashboardScreen(
                         modifier = Modifier.fillMaxWidth(),
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.surfaceVariant
-                        )
+                        ),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                     ) {
                         Column(
                             modifier = Modifier
@@ -360,7 +376,8 @@ fun StatCard(
         modifier = modifier,
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-        )
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
             Box(

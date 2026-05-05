@@ -87,16 +87,15 @@ class AiCoreService(
             val model = getAvailableModel() ?: return FinancialDocumentType.Unknown
 
             val prompt = """
-                Classify this financial document into exactly one type:
-                - income: payslip, salary slip, wage statement, employer payment advice, income proof
-                - expense: receipt, invoice, bill, purchase receipt, tax receipt
-                - bank_statement: bank account statement or transaction list with multiple credits/debits/balances
+                Analyze this financial document image and classify it into exactly one type.
+                Valid types are: "income", "expense", or "bankstatement".
 
-                Choose bank_statement when the document shows account balances, transaction rows, debit/credit columns, or statement period.
-                Choose income only when it is primarily a payslip/income document, not a general bank statement.
-                Choose expense only when it is primarily a merchant receipt/invoice/bill.
+                Rules:
+                1. "income": payslip, salary slip, wage statement, employer payment advice, income proof. Choose this ONLY when it is primarily a payslip/income document, not a general bank statement.
+                2. "expense": receipt, invoice, bill, purchase receipt, tax receipt. Choose this ONLY when it is primarily a merchant receipt/invoice/bill.
+                3. "bankstatement": bank account statement or transaction list with multiple credits/debits/balances. Choose this when the document shows account balances, transaction rows, debit/credit columns, or a statement period.
 
-                Return ONLY JSON:
+                Return ONLY a JSON object in this exact format with no extra text or markdown:
                 {"type":"income"}
             """.trimIndent()
 
@@ -131,8 +130,16 @@ class AiCoreService(
             val model = getAvailableModel() ?: return null
 
             val prompt = """
-                Extract from this receipt: merchant, transaction date (YYYY-MM-DD), total, tax, category from [${ExpensesViewModel.SPENDING_CATEGORIES.joinToString(", ")}].
-                Return ONLY: {"merchant":"...","date":"...","total":0.0,"currency":"$currency","category":"General","taxAmount":0.0}
+                Analyze this receipt image and extract the following information.
+                Rules:
+                1. merchant: The name of the store or business.
+                2. date: Transaction date in YYYY-MM-DD format.
+                3. total: The total amount paid as a number.
+                4. tax: The tax amount as a number.
+                5. category: Best match from this list: [${ExpensesViewModel.SPENDING_CATEGORIES.joinToString(", ")}].
+                
+                Return ONLY a valid JSON object in exactly this format, with no markdown formatting and no extra text:
+                {"merchant":"...","date":"...","total":0.0,"currency":"$currency","category":"General","taxAmount":0.0}
             """.trimIndent()
 
             val request = GenerateContentRequest.Builder(
@@ -185,20 +192,18 @@ class AiCoreService(
             val model = getAvailableModel() ?: return null
 
             val prompt = """
-                Read this income document. It can be a pay slip or a bank statement.
-
-                Return exactly one income entry as JSON only:
+                Analyze this income document (pay slip or bank statement).
+                
+                Rules for extraction:
+                1. employer: Name of the company, payer, or source.
+                2. netPay: For pay slips, use net pay, take-home pay, or amount paid. For bank statements, use the amount from one credit/deposit/money-in transaction row (not the running balance). Must be a positive number. Return 0.0 if not found.
+                3. netPayText: The exact text of the netPay amount, including all commas and decimals (e.g. "10,412.51").
+                4. date: Date in YYYY-MM-DD format. Use "${DateUtils.today()}" if cannot be read.
+                5. category: Best match from: ${IncomeSources.All.joinToString(", ")}.
+                6. notes: Any additional reason or description.
+                
+                Return ONLY a valid JSON object in exactly this format, with no markdown formatting and no extra text:
                 {"employer":"...","netPay":0.0,"netPayText":"...","date":"YYYY-MM-DD","category":"Salary","notes":"..."}
-
-                Amount rules:
-                - Pay slip: use net pay, take-home pay, amount paid, or paid to employee. If there is no net pay, use gross pay.
-                - Bank statement: use the amount from one credit/deposit/money-in transaction row. Use the transaction amount, not the running balance, opening balance, closing balance, available balance, total credits, or total debits.
-                - Prefer rows/descriptions containing salary, payroll, wages, commission, bonus, dividend, interest, rental, refund, freelance, or business income.
-                - The returned netPay must be positive. Return 0.0 only when no income amount is visible at all.
-                - netPayText must copy the full visible amount exactly, including all digits and separators. For example, if the document shows 10,412.51, return netPayText "10,412.51" and netPay 10412.51. Do not shorten it to 10.41.
-
-                Category must be one of: ${IncomeSources.All.joinToString(", ")}.
-                Use today's date "${DateUtils.today()}" only if the document date cannot be read.
             """.trimIndent()
 
             val request = GenerateContentRequest.Builder(
@@ -314,11 +319,14 @@ class AiCoreService(
     ): BankStatementResult? {
         return try {
             val prompt = """
-                This is a bank statement page. Extract every individual transaction row visible.
-                For each row extract: date (YYYY-MM-DD), description, amount as a signed number (negative for debit/withdrawal/payment, positive for credit/deposit/income), amountText (exact digits shown), type ("credit" or "debit").
-                Also extract bankName, accountLast4, period if visible on this page.
-                Ignore opening balance, closing balance, running balance, available balance — those are not transactions.
-                Return ONLY valid JSON (no markdown):
+                Analyze this bank statement page.
+                
+                Rules for extraction:
+                1. Extract bankName, accountLast4, and period if visible.
+                2. Extract every individual transaction row visible. Ignore opening balance, closing balance, running balance, or available balance.
+                3. For each transaction row, extract: date (YYYY-MM-DD), description, amount (negative for debit/withdrawal, positive for credit/deposit), amountText (exact digits shown), type ("credit" or "debit").
+                
+                Return ONLY a valid JSON object in exactly this format, with no markdown formatting and no extra text:
                 {"bankName":"Maybank","accountLast4":"1234","period":"Jan 2025","transactions":[{"date":"2025-01-03","description":"Salary Payment","amount":3500.00,"amountText":"3,500.00","type":"credit"},{"date":"2025-01-05","description":"Grocery Store","amount":-62.40,"amountText":"62.40","type":"debit"}]}
             """.trimIndent()
 

@@ -74,7 +74,10 @@ fun ExpensesScreen(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = onNavigateToScan) {
+            FloatingActionButton(
+                onClick = onNavigateToScan,
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)
+            ) {
                 Icon(Icons.Filled.Add, contentDescription = "Scan Receipt")
             }
         }

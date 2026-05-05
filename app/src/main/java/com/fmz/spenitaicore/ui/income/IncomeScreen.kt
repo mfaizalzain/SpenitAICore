@@ -57,7 +57,10 @@ fun IncomeScreen(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = onNavigateToScan) {
+            FloatingActionButton(
+                onClick = onNavigateToScan,
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)
+            ) {
                 Icon(Icons.Filled.Add, contentDescription = "Scan Pay Slip")
             }
         }
@@ -70,7 +73,8 @@ fun IncomeScreen(
                     .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp),
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.primaryContainer
-                )
+                ),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(16.dp),
