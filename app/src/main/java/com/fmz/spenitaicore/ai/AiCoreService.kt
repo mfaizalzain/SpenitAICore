@@ -319,15 +319,77 @@ class AiCoreService(
     ): BankStatementResult? {
         return try {
             val prompt = """
-                Analyze this bank statement page.
-                
-                Rules for extraction:
-                1. Extract bankName, accountLast4, and period if visible.
-                2. Extract every individual transaction row visible. Ignore opening balance, closing balance, running balance, or available balance.
-                3. For each transaction row, extract: date (YYYY-MM-DD), description, amount (negative for debit/withdrawal, positive for credit/deposit), amountText (exact digits shown), type ("credit" or "debit").
-                
+                Analyze this bank statement page and extract all transaction data.
+
+                EXTRACTION RULES:
+
+                1. BANK METADATA (extract if visible anywhere on the page):
+                   - bankName: The bank's name (e.g., "Maybank", "CIMB Bank", "Public Bank", "HSBC", "Standard Chartered", "OCBC", "DBS", "UOB", "RHB", "Hong Leong Bank", "Affin Bank", "Alliance Bank", "AmBank", "Bank Rakyat", "Bank Islam", "BSN", "Citibank")
+                   - accountLast4: Last 4 digits of the account number
+                   - period: Statement period (e.g., "Jan 2025", "01/01/2025 - 31/01/2025", "January 2025")
+
+                2. TRANSACTION IDENTIFICATION:
+                   A transaction row typically has:
+                   - A date field
+                   - A description/narration field
+                   - One or more amount fields
+
+                   IGNORE these non-transaction rows:
+                   - Opening balance, closing balance, running balance, available balance
+                   - Total debits, total credits, total transactions
+                   - Page totals, brought forward, carried forward
+                   - Interest earned, fees summary rows
+                   - Header rows with column names only
+
+                3. DATE EXTRACTION (convert to YYYY-MM-DD):
+                   Handle these common formats:
+                   - DD/MM/YYYY or DD-MM-YYYY → convert to YYYY-MM-DD
+                   - MM/DD/YYYY or MM-DD-YYYY → convert to YYYY-MM-DD
+                   - YYYY/MM/DD or YYYY-MM-DD → keep as is
+                   - DD MMM YYYY (e.g., "15 Jan 2025") → convert to YYYY-MM-DD
+                   - MMM DD, YYYY (e.g., "Jan 15, 2025") → convert to YYYY-MM-DD
+                   - DD/MM/YY → assume 20YY and convert to YYYY-MM-DD
+                   If year is missing, use the statement period year or current year.
+
+                4. DESCRIPTION EXTRACTION:
+                   Look for fields labeled as: Description, Narration, Particulars, Reference, Transaction Details, Remarks, Payee, Counterparty, Merchant
+                   Extract the full description text. If there are multiple description fields, concatenate them with a space.
+
+                5. AMOUNT EXTRACTION - Handle all these patterns:
+
+                   Pattern A - Separate Credit/Debit columns:
+                   - Credit column may be labeled: Credit, CR, Money In, Deposit, +, Incoming
+                   - Debit column may be labeled: Debit, DR, Money Out, Withdrawal, -, Outgoing
+                   - If amount is in Credit column → positive amount, type="credit"
+                   - If amount is in Debit column → negative amount, type="debit"
+
+                   Pattern B - Single Amount column with sign:
+                   - Amount starting with "+" or no sign in credit context → positive, type="credit"
+                   - Amount starting with "-" or in brackets like "(100.00)" → negative, type="debit"
+
+                   Pattern C - CR/DR suffix:
+                   - "1,234.56 CR" → positive 1234.56, type="credit"
+                   - "1,234.56 DR" → negative 1234.56, type="debit"
+
+                   Pattern D - Running balance column:
+                   - Some statements show: Date | Description | Debit | Credit | Balance
+                   - The Balance column is NOT the transaction amount - ignore it
+                   - Use only the Debit/Credit columns for transaction amounts
+
+                6. AMOUNT FORMAT HANDLING:
+                   - Handle commas as thousand separators: "1,234.56" → 1234.56
+                   - Handle dots as thousand separators (European): "1.234,56" → 1234.56
+                   - Handle bracket notation for negatives: "(100.00)" → -100.00
+                   - Preserve the exact text shown in amountText field
+
+                7. TRANSACTION TYPE DETERMINATION:
+                   - "credit" for: deposits, incoming transfers, salary, refunds, interest earned, credits
+                   - "debit" for: withdrawals, outgoing transfers, purchases, payments, fees, debits
+                   - Default to "debit" if unclear (most transactions are expenses)
+
+                OUTPUT FORMAT:
                 Return ONLY a valid JSON object in exactly this format, with no markdown formatting and no extra text:
-                {"bankName":"Maybank","accountLast4":"1234","period":"Jan 2025","transactions":[{"date":"2025-01-03","description":"Salary Payment","amount":3500.00,"amountText":"3,500.00","type":"credit"},{"date":"2025-01-05","description":"Grocery Store","amount":-62.40,"amountText":"62.40","type":"debit"}]}
+                {"bankName":"Maybank","accountLast4":"1234","period":"Jan 2025","transactions":[{"date":"2025-01-03","description":"SALARY CREDIT ABC COMPANY","amount":3500.00,"amountText":"3,500.00","type":"credit"},{"date":"2025-01-05","description":"GROCERY STORE KL","amount":-62.40,"amountText":"62.40","type":"debit"},{"date":"2025-01-07","description":"ONLINE TRANSFER","amount":-500.00,"amountText":"500.00","type":"debit"},{"date":"2025-01-10","description":"REFUND FROM SHOPEE","amount":45.00,"amountText":"45.00","type":"credit"}]}
             """.trimIndent()
 
             val request = GenerateContentRequest.Builder(
