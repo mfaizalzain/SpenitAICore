@@ -181,8 +181,9 @@ class ReceiptScanViewModel(
             _isBusy.value = true
             try {
                 if (isIncome) {
-                    // Save as income entry
+                    // Save as income entry (update if editing, insert if new)
                     val entry = com.fmz.spenitaicore.data.db.entity.IncomeEntry(
+                        id = editReceiptId,
                         source = _merchant.value,
                         amount = _total.value,
                         currency = _currency.value,
@@ -192,7 +193,7 @@ class ReceiptScanViewModel(
                     )
                     incomeRepo.saveIncomeEntry(entry)
                 } else {
-                    // Save as expense receipt
+                    // Save as expense receipt (update if editing, insert if new)
                     val tags = _tagsInput.value
                         .split(",", ";")
                         .map { it.trim() }
@@ -200,6 +201,7 @@ class ReceiptScanViewModel(
                     val tagsJson = Json.encodeToString(tags)
 
                     val receipt = Receipt(
+                        id = editReceiptId,
                         merchant = _merchant.value,
                         date = _date.value,
                         total = _total.value,
