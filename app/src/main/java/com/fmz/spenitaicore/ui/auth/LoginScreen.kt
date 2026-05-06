@@ -1,6 +1,5 @@
 package com.fmz.spenitaicore.ui.auth
 
-import androidx.activity.compose.LocalActivity
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.compose.foundation.layout.*
@@ -17,6 +16,8 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -29,7 +30,7 @@ fun LoginScreen(
     onSignedIn: () -> Unit
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val activity = LocalActivity.current as? FragmentActivity
+    val activity = LocalContext.current as? FragmentActivity
     val context = LocalContext.current
 
     // Navigate away once signed in
@@ -49,6 +50,13 @@ fun LoginScreen(
         } catch (_: Exception) {
             false
         }
+    }
+
+    // ── Google Sign-In launcher ──────────────────────────────────
+    val googleSignInLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        viewModel.handleGoogleSignInResult(result.resultCode, result.data)
     }
 
     // ── Biometric prompt (created once, triggered by state) ──────
@@ -160,7 +168,7 @@ fun LoginScreen(
 
             // ── Google Sign-In ────────────────────────────────────
             AuthButton(
-                onClick = { viewModel.signInWithGoogle() },
+                onClick = { googleSignInLauncher.launch(viewModel.getGoogleSignInIntent()) },
                 enabled = !state.isLoading,
                 isLoading = state.isLoading && state.authMethod == null,
                 label = "Sign in with Google",

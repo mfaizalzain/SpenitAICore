@@ -74,6 +74,12 @@ fun SettingsScreen(
 
     val context = LocalContext.current
 
+    val googleSignInLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        authViewModel.handleGoogleSignInResult(result.resultCode, result.data)
+    }
+
     // Trigger share when export completes
     LaunchedEffect(exportResult) {
         exportResult?.let { result ->
@@ -214,7 +220,7 @@ fun SettingsScreen(
                         subtitle = "Back up your data and sync across devices",
                         icon = Icons.Outlined.AccountCircle,
                         onClick = {
-                            authViewModel.signInWithGoogle()
+                            googleSignInLauncher.launch(authViewModel.getGoogleSignInIntent())
                         }
                     )
                 }

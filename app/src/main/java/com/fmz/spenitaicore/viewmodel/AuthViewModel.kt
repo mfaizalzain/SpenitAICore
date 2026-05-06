@@ -1,5 +1,7 @@
 package com.fmz.spenitaicore.viewmodel
 
+import android.app.Activity
+import android.content.Intent
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fmz.spenitaicore.SpenItApp
@@ -49,28 +51,31 @@ class AuthViewModel : ViewModel() {
 
     // ── Google Sign-In ────────────────────────────────────────────
 
-    fun signInWithGoogle() {
+    fun getGoogleSignInIntent(): Intent = authService.getGoogleSignInIntent()
+
+    fun handleGoogleSignInResult(resultCode: Int, data: Intent?) {
+        if (resultCode != Activity.RESULT_OK) {
+            _state.value = _state.value.copy(isLoading = false)
+            return
+        }
         viewModelScope.launch {
             _state.value = _state.value.copy(isLoading = true, error = null)
-
-            val result = authService.signInWithGoogle()
-
-            if (result == null) {
+            try {
+                val result = authService.parseGoogleSignInResult(data)
+                persistLogin(
+                    authMethod = "google",
+                    name = result.name,
+                    email = result.email,
+                    photoUrl = result.photoUrl,
+                    googleId = result.googleId,
+                    idToken = result.idToken
+                )
+            } catch (e: Exception) {
                 _state.value = _state.value.copy(
                     isLoading = false,
-                    error = "Sign in was cancelled"
+                    error = e.message ?: "Sign in failed. Please try again."
                 )
-                return@launch
             }
-
-            persistLogin(
-                authMethod = "google",
-                name = result.name,
-                email = result.email,
-                photoUrl = result.photoUrl,
-                googleId = result.googleId,
-                idToken = result.idToken
-            )
         }
     }
 
@@ -194,6 +199,5 @@ class AuthViewModel : ViewModel() {
 
     // ── Legacy alias ──────────────────────────────────────────────
 
-    @Deprecated("Renamed to signInWithGoogle", ReplaceWith("signInWithGoogle()"))
-    fun signIn() = signInWithGoogle()
+
 }

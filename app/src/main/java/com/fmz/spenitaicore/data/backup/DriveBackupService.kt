@@ -66,8 +66,8 @@ class DriveBackupService(private val context: Context) {
         fileName: String
     ): BackupResult {
         return try {
-            val token = GoogleAuthUtil.getTokenWithNotification(
-                context, account, DRIVE_SCOPE, null
+            val token = GoogleAuthUtil.getToken(
+                context, account, DRIVE_SCOPE
             ) ?: return BackupResult(false, "Failed to get Drive access token")
 
             // Find or create the SpenItBackups folder
@@ -103,8 +103,8 @@ class DriveBackupService(private val context: Context) {
      */
     fun listBackups(account: Account): List<BackupFile> {
         return try {
-            val token = GoogleAuthUtil.getTokenWithNotification(
-                context, account, DRIVE_SCOPE, null
+            val token = GoogleAuthUtil.getToken(
+                context, account, DRIVE_SCOPE
             ) ?: return emptyList()
 
             val folderId = findFolderId(token, APP_DATA_FOLDER)
@@ -148,8 +148,8 @@ class DriveBackupService(private val context: Context) {
      */
     fun downloadBackup(account: Account, fileId: String): File? {
         return try {
-            val token = GoogleAuthUtil.getTokenWithNotification(
-                context, account, DRIVE_SCOPE, null
+            val token = GoogleAuthUtil.getToken(
+                context, account, DRIVE_SCOPE
             ) ?: return null
 
             val url = "https://www.googleapis.com/drive/v3/files/$fileId?alt=media"

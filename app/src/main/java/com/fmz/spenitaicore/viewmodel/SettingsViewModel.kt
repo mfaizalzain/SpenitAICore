@@ -10,8 +10,10 @@ import com.fmz.spenitaicore.data.backup.BackupWorker
 import com.fmz.spenitaicore.data.backup.DriveBackupService
 import com.fmz.spenitaicore.util.SalaryCycle
 import com.google.android.gms.auth.UserRecoverableAuthException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class SettingsViewModel : ViewModel() {
 
@@ -223,15 +225,18 @@ class SettingsViewModel : ViewModel() {
             _isBackingUp.value = true
             _backupError.value = null
             try {
-                val account = authService.findGoogleAccount(preferences.getUserEmail())
-                    ?: run {
-                        _backupError.value = "No Google account found. Please sign in first."
-                        _isBackingUp.value = false
-                        return@launch
-                    }
+                val account = withContext(Dispatchers.IO) {
+                    authService.findGoogleAccount(preferences.getUserEmail())
+                } ?: run {
+                    _backupError.value = "No Google account found. Please sign in first."
+                    _isBackingUp.value = false
+                    return@launch
+                }
 
                 // Request Drive authorization — may throw consent required
-                authService.authorizeDrive(account)
+                withContext(Dispatchers.IO) {
+                    authService.authorizeDrive(account)
+                }
 
                 // Store backup settings
                 preferences.setBackupEnabled(true, account.name)
@@ -275,7 +280,9 @@ class SettingsViewModel : ViewModel() {
                     _isBackingUp.value = false
                     return@launch
                 }
-                val account = authService.findGoogleAccount(accountName) ?: run {
+                val account = withContext(Dispatchers.IO) {
+                    authService.findGoogleAccount(accountName)
+                } ?: run {
                     _backupError.value = "Google account not found"
                     _isBackingUp.value = false
                     return@launch
@@ -289,24 +296,26 @@ class SettingsViewModel : ViewModel() {
     }
 
     private suspend fun runManualBackup(account: Account) {
-        val context = SpenItApp.instance
-        val dbPath = context.getDatabasePath("spenit.db")
-        if (!dbPath.exists()) {
-            _backupError.value = "Database not found"
-            _isBackingUp.value = false
-            return
-        }
-        val dateStr = java.text.SimpleDateFormat("yyyy-MM-dd_HHmm", java.util.Locale.US)
-            .format(java.util.Date())
-        val fileName = "SpenIt_Backup_$dateStr.db"
-        val result = driveService.uploadBackup(account, dbPath, fileName)
+        withContext(Dispatchers.IO) {
+            val context = SpenItApp.instance
+            val dbPath = context.getDatabasePath("spenit.db")
+            if (!dbPath.exists()) {
+                _backupError.value = "Database not found"
+                _isBackingUp.value = false
+                return@withContext
+            }
+            val dateStr = java.text.SimpleDateFormat("yyyy-MM-dd_HHmm", java.util.Locale.US)
+                .format(java.util.Date())
+            val fileName = "SpenIt_Backup_$dateStr.db"
+            val result = driveService.uploadBackup(account, dbPath, fileName)
 
-        _isBackingUp.value = false
-        if (result.success) {
-            preferences.setLastBackupTime(System.currentTimeMillis())
-            _lastBackupTime.value = System.currentTimeMillis()
-        } else {
-            _backupError.value = result.message
+            _isBackingUp.value = false
+            if (result.success) {
+                preferences.setLastBackupTime(System.currentTimeMillis())
+                _lastBackupTime.value = System.currentTimeMillis()
+            } else {
+                _backupError.value = result.message
+            }
         }
     }
 
@@ -334,12 +343,16 @@ class SettingsViewModel : ViewModel() {
                     _isLoadingBackups.value = false
                     return@launch
                 }
-                val account = authService.findGoogleAccount(accountName) ?: run {
+                val account = withContext(Dispatchers.IO) {
+                    authService.findGoogleAccount(accountName)
+                } ?: run {
                     _restoreError.value = "Google account not found"
                     _isLoadingBackups.value = false
                     return@launch
                 }
-                val backups = driveService.listBackups(account)
+                val backups = withContext(Dispatchers.IO) {
+                    driveService.listBackups(account)
+                }
                 _availableBackups.value = backups
                 if (backups.isEmpty()) {
                     _restoreError.value = "No backups found on Google Drive"
@@ -371,35 +384,41 @@ class SettingsViewModel : ViewModel() {
                     _isRestoring.value = false
                     return@launch
                 }
-                val account = authService.findGoogleAccount(accountName) ?: run {
+                val account = withContext(Dispatchers.IO) {
+                    authService.findGoogleAccount(accountName)
+                } ?: run {
                     _restoreError.value = "Google account not found"
                     _isRestoring.value = false
                     return@launch
                 }
 
                 // Download the backup
-                val downloadedFile = driveService.downloadBackup(account, backup.id)
+                val downloadedFile = withContext(Dispatchers.IO) {
+                    driveService.downloadBackup(account, backup.id)
+                }
                 if (downloadedFile == null || !downloadedFile.exists()) {
                     _restoreError.value = "Download failed"
                     _isRestoring.value = false
                     return@launch
                 }
 
-                // Close the database
-                try {
-                    container.database.close()
-                } catch (_: Exception) { }
+                withContext(Dispatchers.IO) {
+                    // Close the database
+                    try {
+                        container.database.close()
+                    } catch (_: Exception) { }
 
-                // Replace database files
-                val context = SpenItApp.instance
-                context.getDatabasePath("spenit.db").delete()
-                context.getDatabasePath("spenit.db-wal").delete()
-                context.getDatabasePath("spenit.db-shm").delete()
+                    // Replace database files
+                    val context = SpenItApp.instance
+                    context.getDatabasePath("spenit.db").delete()
+                    context.getDatabasePath("spenit.db-wal").delete()
+                    context.getDatabasePath("spenit.db-shm").delete()
 
-                downloadedFile.copyTo(
-                    context.getDatabasePath("spenit.db"),
-                    overwrite = true
-                )
+                    downloadedFile.copyTo(
+                        context.getDatabasePath("spenit.db"),
+                        overwrite = true
+                    )
+                }
 
                 _selectedBackupForRestore.value = null
                 _restoreSuccess.value = true
