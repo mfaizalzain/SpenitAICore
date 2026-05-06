@@ -1,2 +1,2 @@
-# SpenitNative
-SpenIt native android powered by AICore
+# Spenit AICore
+SpenIt AICore android powered by AICore
