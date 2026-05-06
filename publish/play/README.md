@@ -7,7 +7,7 @@ Prepared on 2026-05-06.
 - Signed AAB: `app/build/outputs/bundle/release/app-release.aab`
 - Application ID: `com.fmz.spenitaicore`
 - Version: `1.0.0`
-- Version code: `1`
+- Version code: `2`
 - Track: use Internal testing or Closed testing for beta.
 
 ## Signing
