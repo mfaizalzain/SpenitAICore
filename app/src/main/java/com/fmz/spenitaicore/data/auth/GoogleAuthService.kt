@@ -1,6 +1,8 @@
 package com.fmz.spenitaicore.data.auth
 
 import android.content.Context
+import android.accounts.Account
+import android.accounts.AccountManager
 import android.util.Base64
 import android.util.Log
 import androidx.credentials.CredentialManager
@@ -180,4 +182,30 @@ class GoogleAuthService(private val context: Context) {
 
     @Deprecated("Renamed to signInWithGoogle", ReplaceWith("signInWithGoogle()"))
     suspend fun signIn(): GoogleSignInResult? = signInWithGoogle()
+
+    // ── Drive / Account helpers ───────────────────────────────────
+
+    /**
+     * Find the first Google account matching the given name, or the first
+     * available Google account on the device. Returns null if none exist.
+     */
+    fun findGoogleAccount(accountName: String? = null): Account? {
+        val accounts = AccountManager.get(context)
+            .getAccountsByType("com.google")
+        if (accounts.isEmpty()) return null
+        return accounts.firstOrNull { it.name == accountName } ?: accounts.first()
+    }
+
+    /**
+     * Request Drive file-scope authorization for the account.
+     * Throws [com.google.android.gms.auth.UserRecoverableAuthException]
+     * if the user needs to grant consent — caller must launch the intent.
+     */
+    fun authorizeDrive(account: Account): String {
+        return com.google.android.gms.auth.GoogleAuthUtil.getToken(
+            context,
+            account,
+            "oauth2:https://www.googleapis.com/auth/drive.file"
+        )
+    }
 }

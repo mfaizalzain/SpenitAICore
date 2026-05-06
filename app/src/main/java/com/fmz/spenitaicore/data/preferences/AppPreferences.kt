@@ -23,6 +23,9 @@ class AppPreferences(private val context: Context) {
         val KEY_USER_EMAIL = stringPreferencesKey("user_email")
         val KEY_USER_PHOTO_URL = stringPreferencesKey("user_photo_url")
         val KEY_AUTH_METHOD = stringPreferencesKey("auth_method")
+        val KEY_BACKUP_ENABLED = booleanPreferencesKey("backup_enabled")
+        val KEY_BACKUP_ACCOUNT = stringPreferencesKey("backup_account")
+        val KEY_LAST_BACKUP_TIME = longPreferencesKey("last_backup_time")
     }
 
     val defaultCurrency: Flow<String> = context.dataStore.data.map { prefs ->
@@ -114,4 +117,27 @@ class AppPreferences(private val context: Context) {
 
     suspend fun getUserPhotoUrl(): String? =
         context.dataStore.data.first()[KEY_USER_PHOTO_URL]
+
+    // ── Backup ────────────────────────────────────────────────────
+
+    suspend fun isBackupEnabled(): Boolean =
+        context.dataStore.data.first()[KEY_BACKUP_ENABLED] ?: false
+
+    suspend fun setBackupEnabled(enabled: Boolean, accountName: String?) {
+        context.dataStore.edit {
+            it[KEY_BACKUP_ENABLED] = enabled
+            if (accountName != null) it[KEY_BACKUP_ACCOUNT] = accountName
+            else it.remove(KEY_BACKUP_ACCOUNT)
+        }
+    }
+
+    suspend fun getBackupAccountName(): String? =
+        context.dataStore.data.first()[KEY_BACKUP_ACCOUNT]
+
+    suspend fun setLastBackupTime(time: Long) {
+        context.dataStore.edit { it[KEY_LAST_BACKUP_TIME] = time }
+    }
+
+    suspend fun getLastBackupTime(): Long =
+        context.dataStore.data.first()[KEY_LAST_BACKUP_TIME] ?: 0L
 }

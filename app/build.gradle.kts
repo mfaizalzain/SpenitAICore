@@ -105,6 +105,12 @@ dependencies {
     implementation("androidx.credentials:credentials-play-services-auth:1.5.0-rc01")
     implementation("com.google.android.libraries.identity.googleid:googleid:1.1.1")
 
+    // Google Sign-In with Drive scope (for backup)
+    implementation("com.google.android.gms:play-services-auth:21.3.0")
+
+    // WorkManager (nightly backup scheduling)
+    implementation("androidx.work:work-runtime-ktx:2.9.1")
+
     // Biometrics
     implementation("androidx.biometric:biometric:1.2.0-alpha05")
 

@@ -2,6 +2,8 @@ package com.fmz.spenitaicore.ui.settings
 
 import android.content.Intent
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -50,6 +52,22 @@ fun SettingsScreen(
     val exportResult by viewModel.exportResult.collectAsStateWithLifecycle()
     val exportError by viewModel.exportError.collectAsStateWithLifecycle()
 
+    // ── Backup state ────────────────────────────────────────────
+    val isBackupEnabled by viewModel.isBackupEnabled.collectAsStateWithLifecycle()
+    val isBackingUp by viewModel.isBackingUp.collectAsStateWithLifecycle()
+    val backupAccountName by viewModel.backupAccountName.collectAsStateWithLifecycle()
+    val lastBackupTime by viewModel.lastBackupTime.collectAsStateWithLifecycle()
+    val backupError by viewModel.backupError.collectAsStateWithLifecycle()
+    val driveConsentIntent by viewModel.driveConsentIntent.collectAsStateWithLifecycle()
+
+    // ── Restore state ───────────────────────────────────────────
+    val availableBackups by viewModel.availableBackups.collectAsStateWithLifecycle()
+    val isLoadingBackups by viewModel.isLoadingBackups.collectAsStateWithLifecycle()
+    val isRestoring by viewModel.isRestoring.collectAsStateWithLifecycle()
+    val restoreSuccess by viewModel.restoreSuccess.collectAsStateWithLifecycle()
+    val restoreError by viewModel.restoreError.collectAsStateWithLifecycle()
+    val selectedBackupForRestore by viewModel.selectedBackupForRestore.collectAsStateWithLifecycle()
+
     var showTaxYearDropdown by remember { mutableStateOf(false) }
     var showCurrencyDropdown by remember { mutableStateOf(false) }
     var showPayDayDropdown by remember { mutableStateOf(false) }
@@ -77,6 +95,22 @@ fun SettingsScreen(
                 Toast.makeText(context, "Failed to share: ${e.message}", Toast.LENGTH_SHORT).show()
             }
             viewModel.clearExportResult()
+        }
+    }
+
+    // Drive consent launcher
+    val driveConsentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        viewModel.handleDriveConsentResult(
+            result.resultCode == android.app.Activity.RESULT_OK
+        )
+    }
+
+    // Launch Drive consent when requested
+    LaunchedEffect(driveConsentIntent) {
+        driveConsentIntent?.let { intent ->
+            driveConsentLauncher.launch(intent)
         }
     }
 
@@ -343,6 +377,140 @@ fun SettingsScreen(
                 }
             }
 
+            // Backup section
+            item {
+                Divider(modifier = Modifier.padding(vertical = 8.dp))
+                Text("Backup", style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(vertical = 8.dp))
+            }
+
+            // Backup error
+            if (backupError != null) {
+                item {
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = backupError!!,
+                            modifier = Modifier.padding(16.dp),
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                }
+            }
+
+            if (isBackupEnabled) {
+                // Backup status
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surface
+                        )
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.Filled.CloudDone,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Auto backup enabled", fontWeight = FontWeight.SemiBold)
+                            }
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                "Nightly backup to Google Drive",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            backupAccountName?.let {
+                                Text(
+                                    "Account: $it",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            if (lastBackupTime > 0) {
+                                val formatter = remember { java.text.SimpleDateFormat("MMM dd, yyyy 'at' hh:mm a", java.util.Locale.US) }
+                                Text(
+                                    "Last backup: ${formatter.format(java.util.Date(lastBackupTime))}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Manual backup button
+                item {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Button(
+                        onClick = { viewModel.runManualBackup() },
+                        enabled = !isBackingUp,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        if (isBackingUp) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.onPrimary
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text("Backing up...")
+                        } else {
+                            Icon(Icons.Outlined.FileDownload, contentDescription = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Back Up Now")
+                        }
+                    }
+                }
+
+                // Disable backup
+                item {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    TextButton(
+                        onClick = { viewModel.disableBackup() },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            "Disable auto backup",
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
+
+                // Restore from backup
+                item {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    SettingsItem(
+                        title = "Restore from Backup",
+                        subtitle = "Replace current data with a backup from Drive",
+                        icon = Icons.Filled.Restore,
+                        onClick = { viewModel.loadBackups() }
+                    )
+                }
+            } else {
+                // Enable backup prompt
+                item {
+                    SettingsItem(
+                        title = "Back Up to Google Drive",
+                        subtitle = "Nightly auto backup of your data",
+                        icon = Icons.Outlined.FileDownload,
+                        onClick = { viewModel.enableBackup() }
+                    )
+                }
+            }
+
             // About section
             item {
                 Divider(modifier = Modifier.padding(vertical = 8.dp))
@@ -374,6 +542,151 @@ fun SettingsScreen(
 
             item { Spacer(modifier = Modifier.height(32.dp)) }
         }
+    }
+
+    // ── Restore dialogs ───────────────────────────────────────────
+
+    // Backup list dialog
+    if (isLoadingBackups || availableBackups.isNotEmpty() || restoreError != null) {
+        AlertDialog(
+            onDismissRequest = {
+                viewModel.clearRestoreError()
+                viewModel.clearSelectedBackup()
+            },
+            title = { Text("Restore from Backup") },
+            text = {
+                Column {
+                    if (isLoadingBackups) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                            Text("Loading backups...")
+                        }
+                    } else if (restoreError != null && availableBackups.isEmpty()) {
+                        Text(restoreError!!, color = MaterialTheme.colorScheme.error)
+                    } else {
+                        Text(
+                            "Select a backup to restore. This will replace all current data.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        availableBackups.take(10).forEach { backup ->
+                            val isSelected = selectedBackupForRestore?.id == backup.id
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 2.dp)
+                                    .clickable { viewModel.selectBackupForRestore(backup) },
+                                colors = CardDefaults.cardColors(
+                                    containerColor = if (isSelected)
+                                        MaterialTheme.colorScheme.primaryContainer
+                                    else
+                                        MaterialTheme.colorScheme.surfaceVariant
+                                )
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Text(backup.name, fontWeight = FontWeight.Medium,
+                                        style = MaterialTheme.typography.bodyMedium)
+                                    Text(
+                                        "${formatFileSize(backup.sizeBytes)} · ${formatDriveDate(backup.createdTime)}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = { viewModel.confirmRestore() },
+                    enabled = selectedBackupForRestore != null && !isRestoring
+                ) {
+                    Text("Restore")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    viewModel.clearRestoreError()
+                    viewModel.clearSelectedBackup()
+                }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // Restoring progress
+    if (isRestoring) {
+        AlertDialog(
+            onDismissRequest = { },
+            title = { Text("Restoring...") },
+            text = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                    Text("Downloading and restoring backup...")
+                }
+            },
+            confirmButton = { },
+            dismissButton = { }
+        )
+    }
+
+    // Restore success
+    if (restoreSuccess) {
+        AlertDialog(
+            onDismissRequest = { },
+            title = { Text("Restore Complete") },
+            text = {
+                Text("Your data has been restored. The app needs to restart to apply the changes.")
+            },
+            confirmButton = {
+                TextButton(onClick = { viewModel.restartApp() }) {
+                    Text("Restart Now")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.clearRestoreResult() }) {
+                    Text("Later")
+                }
+            }
+        )
+    }
+
+    // Restore error (when not in the backup list dialog)
+    if (restoreError != null && availableBackups.isEmpty() && !isLoadingBackups) {
+        // Error already shown in the backup list dialog above
+    }
+}
+
+/**
+ * Format file size in human-readable form.
+ */
+private fun formatFileSize(bytes: Long): String {
+    return when {
+        bytes < 1024 -> "$bytes B"
+        bytes < 1024 * 1024 -> "${"%.1f".format(bytes / 1024.0)} KB"
+        else -> "${"%.1f".format(bytes / (1024.0 * 1024.0))} MB"
+    }
+}
+
+/**
+ * Format a Drive ISO 8601 date string to a readable form.
+ */
+private fun formatDriveDate(isoDate: String): String {
+    return try {
+        val sdf = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.US)
+        val out = java.text.SimpleDateFormat("MMM dd, yyyy hh:mm a", java.util.Locale.US)
+        out.format(sdf.parse(isoDate.substringBefore("."))!!)
+    } catch (_: Exception) {
+        isoDate.take(16)
     }
 }
 
