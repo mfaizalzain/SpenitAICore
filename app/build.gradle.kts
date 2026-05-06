@@ -22,9 +22,36 @@ android {
         }
     }
 
+    signingConfigs {
+        create("releaseUpload") {
+            val keystorePath = providers.environmentVariable("SPENIT_UPLOAD_KEYSTORE").orNull
+            val keystorePassword = providers.environmentVariable("SPENIT_UPLOAD_STORE_PASSWORD").orNull
+            val keyAliasValue = providers.environmentVariable("SPENIT_UPLOAD_KEY_ALIAS").orNull
+            val keyPasswordValue = providers.environmentVariable("SPENIT_UPLOAD_KEY_PASSWORD").orNull
+
+            if (!keystorePath.isNullOrBlank() &&
+                !keystorePassword.isNullOrBlank() &&
+                !keyAliasValue.isNullOrBlank() &&
+                !keyPasswordValue.isNullOrBlank()
+            ) {
+                storeFile = file(keystorePath)
+                storePassword = keystorePassword
+                keyAlias = keyAliasValue
+                keyPassword = keyPasswordValue
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
+            val hasReleaseSigning = providers.environmentVariable("SPENIT_UPLOAD_KEYSTORE").isPresent &&
+                providers.environmentVariable("SPENIT_UPLOAD_STORE_PASSWORD").isPresent &&
+                providers.environmentVariable("SPENIT_UPLOAD_KEY_ALIAS").isPresent &&
+                providers.environmentVariable("SPENIT_UPLOAD_KEY_PASSWORD").isPresent
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("releaseUpload")
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

@@ -14,6 +14,8 @@ fun BannerAd(
     modifier: Modifier = Modifier,
     adUnitId: String
 ) {
+    if (adUnitId.isBlank()) return
+
     val context = LocalContext.current
     val activity = context as? Activity
 

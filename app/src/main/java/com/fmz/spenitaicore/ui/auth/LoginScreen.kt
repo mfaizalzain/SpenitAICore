@@ -6,6 +6,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.Image
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Fingerprint
 import androidx.compose.material.icons.outlined.Key
@@ -118,19 +119,18 @@ fun LoginScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
-                // Icon in a white circle
+                // App mark
                 Card(
-                    modifier = Modifier.size(96.dp),
+                    modifier = Modifier.size(108.dp),
                     shape = CircleShape,
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f)),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 10.dp)
                 ) {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Icon(
+                        Image(
                             painter = painterResource(id = R.drawable.ic_launcher_foreground),
                             contentDescription = null,
-                            modifier = Modifier.size(60.dp),
-                            tint = primaryColor
+                            modifier = Modifier.size(92.dp)
                         )
                     }
                 }
