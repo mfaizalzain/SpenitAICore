@@ -18,5 +18,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "SpenItNative"
+rootProject.name = "SpenItAICore"
 include(":app")
