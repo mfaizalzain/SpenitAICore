@@ -78,7 +78,7 @@ fun ExpensesScreen(
                 onClick = onNavigateToScan,
                 shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)
             ) {
-                Icon(Icons.Filled.Add, contentDescription = "Scan Receipt")
+                Icon(Icons.Filled.Add, contentDescription = "Scan Expense")
             }
         }
     ) { padding ->
@@ -94,7 +94,7 @@ fun ExpensesScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 8.dp),
-                placeholder = { Text("Search receipts... (tax 2024, >500, #groceries)") },
+                placeholder = { Text("Search expenses... (tax 2024, >500, #groceries)") },
                 leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
                 trailingIcon = {
                     if (searchQuery.isNotEmpty()) {
@@ -164,7 +164,7 @@ fun ExpensesScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        "No receipts found",
+                        "No expenses found",
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -243,7 +243,7 @@ fun ExpensesScreen(
         BottomSheetDialog(
             visible = true,
             onDismiss = { viewModel.dismissEdit() },
-            title = "Edit Receipt",
+            title = "Edit Expense",
             confirmText = "Save",
             onConfirm = {
                 viewModel.saveEdit(
@@ -371,7 +371,7 @@ fun ExpensesScreen(
     FullBottomSheet(
         visible = isDetailVisible,
         onDismiss = { viewModel.dismissDetail() },
-        title = "Receipt Details"
+        title = "Expense Details"
     ) {
         Column {
             selectedReceipt?.let { receipt ->

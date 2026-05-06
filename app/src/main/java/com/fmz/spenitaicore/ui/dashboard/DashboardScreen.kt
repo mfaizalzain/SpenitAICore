@@ -80,7 +80,7 @@ fun DashboardScreen(
                 containerColor = MaterialTheme.colorScheme.primary,
                 shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)
             ) {
-                Icon(Icons.Filled.Add, contentDescription = "Scan Receipt", tint = MaterialTheme.colorScheme.onPrimary)
+                Icon(Icons.Filled.Add, contentDescription = "Scan Expense", tint = MaterialTheme.colorScheme.onPrimary)
             }
         }
     ) { padding ->
@@ -163,7 +163,7 @@ fun DashboardScreen(
                     ) {
                         ActionChip(
                             modifier = Modifier.weight(1f),
-                            label = "Scan Receipt",
+                            label = "Scan Expense",
                             icon = Icons.Filled.CameraAlt,
                             onClick = onNavigateToScan
                         )
@@ -196,7 +196,7 @@ fun DashboardScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Recent Receipts",
+                        text = "Recent Expenses",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold
                     )
@@ -228,12 +228,12 @@ fun DashboardScreen(
                             )
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
-                                text = "No receipts yet",
+                                text = "No expenses yet",
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Text(
-                                text = "Scan your first receipt to get started",
+                                text = "Scan your first expense to get started",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -260,7 +260,7 @@ fun DashboardScreen(
     FullBottomSheet(
         visible = isDetailVisible,
         onDismiss = { viewModel.dismissDetail() },
-        title = "Receipt Details"
+        title = "Expense Details"
     ) {
         Column {
             selectedReceipt?.let { receipt ->

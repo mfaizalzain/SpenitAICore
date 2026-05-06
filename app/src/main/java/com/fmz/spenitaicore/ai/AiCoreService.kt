@@ -91,8 +91,8 @@ class AiCoreService(
                 Valid types are: "income", "expense", or "bankstatement".
 
                 Rules:
-                1. "income": payslip, salary slip, wage statement, employer payment advice, income proof. Choose this ONLY when it is primarily a payslip/income document, not a general bank statement.
-                2. "expense": receipt, invoice, bill, purchase receipt, tax receipt. Choose this ONLY when it is primarily a merchant receipt/invoice/bill.
+                1. "income": income document, salary statement, wage statement, employer payment advice, income proof. Choose this ONLY when it is primarily an income document, not a general bank statement.
+                2. "expense": expense receipt, invoice, bill, purchase receipt, tax receipt. Choose this ONLY when it is primarily a merchant expense/invoice/bill.
                 3. "bankstatement": bank account statement or transaction list with multiple credits/debits/balances. Choose this when the document shows account balances, transaction rows, debit/credit columns, or a statement period.
 
                 Return ONLY a JSON object in this exact format with no extra text or markdown:
@@ -124,22 +124,22 @@ class AiCoreService(
         imagePath: String,
         currency: String
     ): OcrResult? {
-        Log.d("AiCoreService", "Starting receipt extraction for: $imagePath")
+        Log.d("AiCoreService", "Starting expense extraction for: $imagePath")
         return try {
             val bitmap = loadBitmapFromPath(imagePath) ?: return null
             val model = getAvailableModel() ?: return null
 
             val prompt = """
-                Analyze this receipt image and extract the following information.
+                Analyze this expense document image and extract the following information.
                 Rules:
                 1. merchant: The name of the store or business.
                 2. date: Transaction date in YYYY-MM-DD format.
                    IMPORTANT - Handle date format ambiguity:
-                   - Receipts usually show day first (DD/MM/YYYY or DD-MM-YYYY), especially outside US
+                   - Expense documents usually show day first (DD/MM/YYYY or DD-MM-YYYY), especially outside US
                    - Look at the date: if day value > 12, it's definitely DD/MM format
                    - If month value > 12, it's definitely MM/DD format
                    - Textual dates like "15 Jan 2025" or "Jan 15, 2025" are unambiguous - use the text
-                   - When ambiguous (both day and month ≤ 12), prefer DD/MM/YYYY for non-US receipts
+                   - When ambiguous (both day and month ≤ 12), prefer DD/MM/YYYY for non-US expense documents
                    - Examples: "15/03/2025" → "2025-03-15", "03/15/2025" (US) → "2025-03-15", "01/02/2025" → prefer "2025-02-01"
                 3. total: The total amount paid as a number.
                 4. tax: The tax amount as a number.
@@ -159,7 +159,7 @@ class AiCoreService(
                 ?.replace("```json", "")?.replace("```", "")?.trim()
                 ?: return null
 
-            Log.d("AiCoreService", "Receipt JSON: $jsonStr")
+            Log.d("AiCoreService", "Expense JSON: $jsonStr")
             val jsonObj = json.parseToJsonElement(jsonStr).jsonObject
 
             val items = jsonObj["items"]?.jsonArray?.map {

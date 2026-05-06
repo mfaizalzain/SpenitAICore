@@ -108,7 +108,7 @@ fun PaySlipScanScreen(
     Scaffold(
         topBar = {
             CompactTopAppBar(
-                title = { Text("Scan Pay Slip") },
+                title = { Text("Scan Income") },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.Filled.Close, contentDescription = "Close")
@@ -192,7 +192,7 @@ fun PaySlipScanScreen(
                     ) {
                         Text("\uD83D\uDCF7", style = MaterialTheme.typography.displayMedium)
                         Spacer(modifier = Modifier.height(12.dp))
-                        Text("Capture Pay Slip",
+                        Text("Capture Income",
                             style = MaterialTheme.typography.titleMedium)
                         Spacer(modifier = Modifier.height(16.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

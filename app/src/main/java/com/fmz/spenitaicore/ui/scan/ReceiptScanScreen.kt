@@ -108,7 +108,7 @@ fun ReceiptScanScreen(
     Scaffold(
         topBar = {
             CompactTopAppBar(
-                title = { Text("Scan Receipt") },
+                title = { Text("Scan Expense") },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.Filled.Close, contentDescription = "Close")
@@ -150,7 +150,7 @@ fun ReceiptScanScreen(
                         // In production, use Coil to load the image
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text("\uD83E\uDDFE", style = MaterialTheme.typography.displayMedium)
-                            Text("Receipt image captured",
+                            Text("Expense image captured",
                                 style = MaterialTheme.typography.bodyMedium)
                         }
                     }
@@ -193,7 +193,7 @@ fun ReceiptScanScreen(
                     ) {
                         Text("\uD83D\uDCF7", style = MaterialTheme.typography.displayMedium)
                         Spacer(modifier = Modifier.height(12.dp))
-                        Text("Capture Receipt",
+                        Text("Capture Expense",
                             style = MaterialTheme.typography.titleMedium)
                         Spacer(modifier = Modifier.height(16.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

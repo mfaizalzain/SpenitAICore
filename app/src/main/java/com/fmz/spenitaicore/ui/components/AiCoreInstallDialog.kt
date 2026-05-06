@@ -19,7 +19,7 @@ fun AiCoreInstallDialog(
             title = { Text("AI Features Unavailable", fontWeight = FontWeight.Bold) },
             text = {
                 Text(
-                    "Google AICore is required for on-device AI receipt scanning and insights. " +
+                    "Google AICore is required for on-device AI expense scanning and insights. " +
                     "Download it from the Play Store (free, ~2GB). " +
                     "Basic manual entry is still available without AICore."
                 )

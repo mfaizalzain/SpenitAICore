@@ -24,21 +24,20 @@
     <string name="status_watch_spending">Watch spending</string>
     <string name="status_overspending">Overspending</string>
 
-    <string name="scan_receipt">Scan Receipt</string>
-    <string name="scan_pay_slip">Add Income</string>
+    <string name="scan_expense">Scan Expense</string>
     <string name="add_income">Add Income</string>
     <string name="import_bank_statement">Import Bank Statement</string>
     <string name="view_all">View All</string>
-    <string name="recent_receipts">Recent Receipts</string>
+    <string name="recent_expenses">Recent Expenses</string>
 
-    <string name="no_receipts">No receipts yet</string>
-    <string name="no_receipts_description">Scan your first receipt to get started</string>
+    <string name="no_expenses">No expenses yet</string>
+    <string name="no_expenses_description">Scan your first expense to get started</string>
     <string name="no_income">No income entries</string>
     <string name="no_imports">No files to import</string>
     <string name="no_imports_description">Add files to scan and process them</string>
 
-    <string name="search_receipts">Search receipts… (tax 2024, >500, #groceries)</string>
-    <string name="edit_receipt">Edit Receipt</string>
+    <string name="search_expenses">Search expenses… (tax 2024, >500, #groceries)</string>
+    <string name="edit_expense">Edit Expense</string>
     <string name="edit_income">Edit Income</string>
     <string name="save">Save</string>
     <string name="cancel">Cancel</string>
