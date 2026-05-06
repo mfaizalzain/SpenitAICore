@@ -17,6 +17,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.fmz.spenitaicore.AppContainer
+import com.fmz.spenitaicore.ui.auth.LoginScreen
 import com.fmz.spenitaicore.ui.dashboard.DashboardScreen
 import com.fmz.spenitaicore.ui.expenses.ExpensesScreen
 import com.fmz.spenitaicore.ui.income.IncomeScreen
@@ -50,6 +51,13 @@ fun SpenItNavHost(
 ) {
     val navController = rememberNavController()
 
+    // Auth state
+    val authViewModel = remember { AuthViewModel() }
+    val authState by authViewModel.state.collectAsStateWithLifecycle()
+
+    // Determine start destination based on auth state
+    val startDestination = if (authState.isLoggedIn) Screen.Dashboard.route else "login"
+
     // Auto-navigate to shared imports if files were shared into the app
     LaunchedEffect(sharedImportSignal) {
         if (sharedImportSignal > 0) {
@@ -66,41 +74,57 @@ fun SpenItNavHost(
     val insightsViewModel = remember { InsightsViewModel() }
     val settingsViewModel = remember { SettingsViewModel() }
 
+    // Don't show bottom bar on login screen
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = navBackStackEntry?.destination?.route
+    val showBottomBar = currentRoute != "login"
+
     Scaffold(
         bottomBar = {
-            NavigationBar {
-                val navBackStackEntry by navController.currentBackStackEntryAsState()
-                val currentRoute = navBackStackEntry?.destination?.route
-
-                bottomNavItems.forEach { screen ->
-                    NavigationBarItem(
-                        icon = {
-                            Icon(
-                                imageVector = if (currentRoute == screen.route) screen.selectedIcon else screen.icon,
-                                contentDescription = screen.title
-                            )
-                        },
-                        label = { Text(screen.title) },
-                        selected = currentRoute == screen.route,
-                        onClick = {
-                            if (currentRoute != screen.route) {
-                                navController.navigate(screen.route) {
-                                    popUpTo(Screen.Dashboard.route) { saveState = true }
-                                    launchSingleTop = true
-                                    restoreState = true
+            if (showBottomBar) {
+                NavigationBar {
+                    bottomNavItems.forEach { screen ->
+                        NavigationBarItem(
+                            icon = {
+                                Icon(
+                                    imageVector = if (currentRoute == screen.route) screen.selectedIcon else screen.icon,
+                                    contentDescription = screen.title
+                                )
+                            },
+                            label = { Text(screen.title) },
+                            selected = currentRoute == screen.route,
+                            onClick = {
+                                if (currentRoute != screen.route) {
+                                    navController.navigate(screen.route) {
+                                        popUpTo(Screen.Dashboard.route) { saveState = true }
+                                        launchSingleTop = true
+                                        restoreState = true
+                                    }
                                 }
                             }
-                        }
-                    )
+                        )
+                    }
                 }
             }
         }
     ) { innerPadding ->
         NavHost(
             navController = navController,
-            startDestination = Screen.Dashboard.route,
+            startDestination = startDestination,
             modifier = Modifier.padding(innerPadding)
         ) {
+            // Login screen
+            composable("login") {
+                LoginScreen(
+                    viewModel = authViewModel,
+                    onSignedIn = {
+                        navController.navigate(Screen.Dashboard.route) {
+                            popUpTo("login") { inclusive = true }
+                        }
+                    }
+                )
+            }
+
             composable(Screen.Dashboard.route) {
                 DashboardScreen(
                     viewModel = dashboardViewModel,
@@ -134,7 +158,15 @@ fun SpenItNavHost(
             }
 
             composable(Screen.Settings.route) {
-                SettingsScreen(viewModel = settingsViewModel)
+                SettingsScreen(
+                    viewModel = settingsViewModel,
+                    authViewModel = authViewModel,
+                    onSignOut = {
+                        navController.navigate("login") {
+                            popUpTo(0) { inclusive = true }
+                        }
+                    }
+                )
             }
 
             composable(

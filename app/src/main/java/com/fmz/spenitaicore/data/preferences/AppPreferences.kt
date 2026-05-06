@@ -17,6 +17,12 @@ class AppPreferences(private val context: Context) {
         val KEY_SALARY_PAY_DAY = intPreferencesKey("salary_pay_day")
         val KEY_APP_LANGUAGE = stringPreferencesKey("app_language")
         val KEY_APP_LOCK_ENABLED = booleanPreferencesKey("app_lock_enabled")
+        val KEY_IS_LOGGED_IN = booleanPreferencesKey("is_logged_in")
+        val KEY_GOOGLE_ID = stringPreferencesKey("google_id")
+        val KEY_USER_NAME = stringPreferencesKey("user_name")
+        val KEY_USER_EMAIL = stringPreferencesKey("user_email")
+        val KEY_USER_PHOTO_URL = stringPreferencesKey("user_photo_url")
+        val KEY_AUTH_METHOD = stringPreferencesKey("auth_method")
     }
 
     val defaultCurrency: Flow<String> = context.dataStore.data.map { prefs ->
@@ -59,4 +65,53 @@ class AppPreferences(private val context: Context) {
     suspend fun setAppLockEnabled(enabled: Boolean) {
         context.dataStore.edit { it[KEY_APP_LOCK_ENABLED] = enabled }
     }
+
+    // --- Auth state ---
+
+    val isLoggedIn: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[KEY_IS_LOGGED_IN] ?: false
+    }
+
+    suspend fun getIsLoggedIn(): Boolean =
+        context.dataStore.data.first()[KEY_IS_LOGGED_IN] ?: false
+
+    suspend fun setLoggedIn(
+        googleId: String,
+        name: String,
+        email: String,
+        photoUrl: String?,
+        authMethod: String = "google"
+    ) {
+        context.dataStore.edit {
+            it[KEY_IS_LOGGED_IN] = true
+            it[KEY_GOOGLE_ID] = googleId
+            it[KEY_USER_NAME] = name
+            it[KEY_USER_EMAIL] = email
+            it[KEY_AUTH_METHOD] = authMethod
+            if (photoUrl != null) it[KEY_USER_PHOTO_URL] = photoUrl
+        }
+    }
+
+    suspend fun clearAuth() {
+        context.dataStore.edit {
+            it.remove(KEY_IS_LOGGED_IN)
+            it.remove(KEY_GOOGLE_ID)
+            it.remove(KEY_USER_NAME)
+            it.remove(KEY_USER_EMAIL)
+            it.remove(KEY_USER_PHOTO_URL)
+            it.remove(KEY_AUTH_METHOD)
+        }
+    }
+
+    suspend fun getAuthMethod(): String? =
+        context.dataStore.data.first()[KEY_AUTH_METHOD]
+
+    suspend fun getUserName(): String =
+        context.dataStore.data.first()[KEY_USER_NAME] ?: ""
+
+    suspend fun getUserEmail(): String =
+        context.dataStore.data.first()[KEY_USER_EMAIL] ?: ""
+
+    suspend fun getUserPhotoUrl(): String? =
+        context.dataStore.data.first()[KEY_USER_PHOTO_URL]
 }

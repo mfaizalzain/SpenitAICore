@@ -3,29 +3,50 @@ package com.fmz.spenitaicore.ui.settings
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.outlined.*
+import androidx.compose.material.icons.outlined.AccountCircle
+import androidx.compose.material.icons.outlined.AttachMoney
+import androidx.compose.material.icons.outlined.CalendarMonth
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.Logout
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil.compose.AsyncImage
 import com.fmz.spenitaicore.ui.components.CompactTopAppBar
+import com.fmz.spenitaicore.viewmodel.AuthViewModel
 import com.fmz.spenitaicore.viewmodel.SettingsViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(viewModel: SettingsViewModel) {
+fun SettingsScreen(
+    viewModel: SettingsViewModel,
+    authViewModel: AuthViewModel,
+    onSignOut: () -> Unit
+) {
     val selectedCurrency by viewModel.selectedCurrencyCode.collectAsStateWithLifecycle()
     val salaryPayDay by viewModel.salaryPayDay.collectAsStateWithLifecycle()
     val isAppLockEnabled by viewModel.isAppLockEnabled.collectAsStateWithLifecycle()
     val isBusy by viewModel.isBusy.collectAsStateWithLifecycle()
+    val authState by authViewModel.state.collectAsStateWithLifecycle()
 
     var showCurrencyDropdown by remember { mutableStateOf(false) }
     var showPayDayDropdown by remember { mutableStateOf(false) }
+
+    // Navigate to login on sign-out
+    LaunchedEffect(authState.isLoggedIn) {
+        if (!authState.isLoggedIn) {
+            onSignOut()
+        }
+    }
 
     LaunchedEffect(Unit) {
         viewModel.loadSettings()
@@ -43,8 +64,92 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            // Profile section
+            // Account section
             item {
+                Text("Account", style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(vertical = 8.dp))
+            }
+
+            if (authState.isLoggedIn) {
+                // Signed-in profile card
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surface
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            if (authState.userPhotoUrl != null) {
+                                AsyncImage(
+                                    model = authState.userPhotoUrl,
+                                    contentDescription = "Profile photo",
+                                    modifier = Modifier
+                                        .size(48.dp)
+                                        .clip(CircleShape),
+                                    contentScale = ContentScale.Crop
+                                )
+                            } else {
+                                Icon(
+                                    Icons.Filled.AccountCircle,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(48.dp),
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(16.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = authState.userName.ifEmpty { "User" },
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                if (authState.userEmail.isNotEmpty()) {
+                                    Text(
+                                        text = authState.userEmail,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Sign out
+                item {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    SettingsItem(
+                        title = "Sign Out",
+                        subtitle = "Disconnect your Google account",
+                        icon = Icons.Outlined.Logout,
+                        onClick = { authViewModel.signOut() }
+                    )
+                }
+            } else {
+                // Sign in prompt
+                item {
+                    SettingsItem(
+                        title = "Sign in with Google",
+                        subtitle = "Back up your data and sync across devices",
+                        icon = Icons.Outlined.AccountCircle,
+                        onClick = {
+                            authViewModel.signInWithGoogle()
+                        }
+                    )
+                }
+            }
+
+            // Preferences section
+            item {
+                Divider(modifier = Modifier.padding(vertical = 8.dp))
                 Text("Preferences", style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.primary,
@@ -145,24 +250,6 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
-            }
-
-            // Donation
-            item {
-                Spacer(modifier = Modifier.height(8.dp))
-                Text("Support", style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(vertical = 4.dp))
-            }
-
-            item {
-                SettingsItem(
-                    title = "Support Development",
-                    subtitle = "Buy me a coffee ☕",
-                    icon = Icons.Outlined.Favorite,
-                    onClick = { /* Open donation link */ }
-                )
             }
 
             item { Spacer(modifier = Modifier.height(32.dp)) }

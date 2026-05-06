@@ -100,6 +100,11 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.9.0")
 
+    // Credential Manager (Google Sign-In)
+    implementation("androidx.credentials:credentials:1.5.0-rc01")
+    implementation("androidx.credentials:credentials-play-services-auth:1.5.0-rc01")
+    implementation("com.google.android.libraries.identity.googleid:googleid:1.1.1")
+
     // Biometrics
     implementation("androidx.biometric:biometric:1.2.0-alpha05")
 
