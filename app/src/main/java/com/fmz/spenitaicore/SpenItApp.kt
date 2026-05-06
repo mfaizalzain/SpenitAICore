@@ -11,6 +11,8 @@ import com.fmz.spenitaicore.data.export.ExportService
 import com.fmz.spenitaicore.data.backup.DriveBackupService
 import com.fmz.spenitaicore.data.backup.BackupNotificationHelper
 import com.fmz.spenitaicore.data.backup.BackupWorker
+import com.fmz.spenitaicore.data.notification.ImportNotificationHelper
+import com.google.android.gms.ads.MobileAds
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -25,8 +27,11 @@ class SpenItApp : Application() {
         instance = this
         container = AppContainer(this)
 
-        // Create notification channel for backup notifications
         BackupNotificationHelper.createChannel(this)
+        ImportNotificationHelper.createChannel(this)
+
+        // Initialize AdMob (async, won't block startup)
+        MobileAds.initialize(this)
 
         // Reschedule nightly backup if enabled (survives reboots)
         CoroutineScope(Dispatchers.IO).launch {

@@ -13,18 +13,24 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.fmz.spenitaicore.R
 import com.fmz.spenitaicore.data.db.entity.Receipt
 import com.fmz.spenitaicore.ui.components.CompactTopAppBar
 import com.fmz.spenitaicore.ui.components.ReceiptCard
 import com.fmz.spenitaicore.ui.components.FullBottomSheet
+import com.fmz.spenitaicore.ui.components.BottomSheetDialog
+import com.fmz.spenitaicore.ui.components.DatePickerField
 import com.fmz.spenitaicore.ui.components.AiCoreInstallDialog
+import com.fmz.spenitaicore.ui.components.BannerAd
 import com.fmz.spenitaicore.ui.theme.SuccessGreen
 import com.fmz.spenitaicore.ui.theme.WarningOrange
 import com.fmz.spenitaicore.ui.theme.ErrorRed
 import com.fmz.spenitaicore.viewmodel.DashboardViewModel
+import com.fmz.spenitaicore.viewmodel.ExpensesViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -50,6 +56,8 @@ fun DashboardScreen(
     val selectedItems by viewModel.selectedItems.collectAsStateWithLifecycle()
     val selectedTagsDisplay by viewModel.selectedTagsDisplay.collectAsStateWithLifecycle()
     val isDetailVisible by viewModel.isDetailVisible.collectAsStateWithLifecycle()
+    val isEditVisible by viewModel.isEditVisible.collectAsStateWithLifecycle()
+    val editingReceipt by viewModel.editingReceipt.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) {
         viewModel.quietLoad()
@@ -245,14 +253,158 @@ fun DashboardScreen(
                     ReceiptCard(
                         receipt = receipt,
                         onClick = { viewModel.viewReceipt(receipt) },
-                        onEdit = { },
+                        onEdit = { viewModel.startEdit(receipt) },
                         onDelete = { viewModel.deleteReceipt(receipt) }
                     )
                 }
             }
 
+            // Banner ad
+            item {
+                val adUnitId = LocalContext.current.getString(R.string.admob_banner_ad_unit_id)
+                BannerAd(
+                    modifier = Modifier.fillMaxWidth().wrapContentHeight(),
+                    adUnitId = adUnitId
+                )
+            }
+
             // Bottom spacer for FAB
             item { Spacer(modifier = Modifier.height(72.dp)) }
+        }
+    }
+
+    // Edit bottom sheet
+    if (isEditVisible && editingReceipt != null) {
+        var currentMerchant by remember { mutableStateOf(editingReceipt!!.merchant) }
+        var currentAmount by remember { mutableStateOf(editingReceipt!!.total.toString()) }
+        var currentDate by remember { mutableStateOf(editingReceipt!!.date) }
+        var currentCategory by remember { mutableStateOf(editingReceipt!!.category) }
+        var currentNotes by remember { mutableStateOf(editingReceipt!!.notes ?: "") }
+        var isTaxDeductible by remember { mutableStateOf(editingReceipt!!.isTaxDeductible) }
+        var taxCategory by remember { mutableStateOf(editingReceipt!!.taxCategory ?: "") }
+        var catDropdown by remember { mutableStateOf(false) }
+        var taxCatDropdown by remember { mutableStateOf(false) }
+
+        BottomSheetDialog(
+            visible = true,
+            onDismiss = { viewModel.dismissEdit() },
+            title = "Edit Expense",
+            confirmText = "Save",
+            onConfirm = {
+                viewModel.saveEdit(
+                    merchant = currentMerchant,
+                    amountText = currentAmount,
+                    category = currentCategory,
+                    notes = currentNotes,
+                    date = currentDate,
+                    isTaxDeductible = isTaxDeductible,
+                    taxCategory = taxCategory
+                )
+            }
+        ) {
+            OutlinedTextField(
+                value = currentMerchant,
+                onValueChange = { currentMerchant = it },
+                label = { Text("Merchant") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            DatePickerField(
+                value = currentDate,
+                onValueChange = { currentDate = it },
+                label = "Date"
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedTextField(
+                value = currentAmount,
+                onValueChange = { currentAmount = it },
+                label = { Text("Amount") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Box {
+                OutlinedTextField(
+                    value = currentCategory,
+                    onValueChange = {},
+                    label = { Text("Category") },
+                    modifier = Modifier.fillMaxWidth(),
+                    readOnly = true,
+                    trailingIcon = {
+                        IconButton(onClick = { catDropdown = true }) {
+                            Icon(Icons.Filled.ArrowDropDown, null)
+                        }
+                    }
+                )
+                DropdownMenu(expanded = catDropdown, onDismissRequest = { catDropdown = false }) {
+                    ExpensesViewModel.SPENDING_CATEGORIES.forEach { cat ->
+                        DropdownMenuItem(
+                            text = { Text(cat) },
+                            onClick = {
+                                currentCategory = cat
+                                catDropdown = false
+                            }
+                        )
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("Tax Deductible", style = MaterialTheme.typography.bodyLarge)
+                Switch(
+                    checked = isTaxDeductible,
+                    onCheckedChange = { isTaxDeductible = it }
+                )
+            }
+            if (isTaxDeductible) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Box {
+                    OutlinedTextField(
+                        value = taxCategory,
+                        onValueChange = {},
+                        label = { Text("Tax Category") },
+                        modifier = Modifier.fillMaxWidth(),
+                        readOnly = true,
+                        trailingIcon = {
+                            IconButton(onClick = { taxCatDropdown = true }) {
+                                Icon(Icons.Filled.ArrowDropDown, null)
+                            }
+                        }
+                    )
+                    DropdownMenu(
+                        expanded = taxCatDropdown,
+                        onDismissRequest = { taxCatDropdown = false }
+                    ) {
+                        listOf(
+                            "Business Expense", "Medical & Healthcare", "Parent Care",
+                            "Lifestyle (General)", "Lifestyle (Sports)", "Education (Self)",
+                            "Insurance & EPF", "Charitable Donation", "Housing Loan Interest",
+                            "Zakat / Fitrah", "Other Reliefs"
+                        ).forEach { tc ->
+                            DropdownMenuItem(
+                                text = { Text(tc) },
+                                onClick = {
+                                    taxCategory = tc
+                                    taxCatDropdown = false
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedTextField(
+                value = currentNotes,
+                onValueChange = { currentNotes = it },
+                label = { Text("Notes") },
+                modifier = Modifier.fillMaxWidth(),
+                minLines = 2
+            )
         }
     }
 
@@ -389,7 +541,17 @@ fun DashboardScreen(
             ) {
                 Button(
                     onClick = {
-                        selectedReceipt?.let { 
+                        selectedReceipt?.let { viewModel.startEdit(it) }
+                    },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(Icons.Filled.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Edit")
+                }
+                Button(
+                    onClick = {
+                        selectedReceipt?.let {
                             viewModel.deleteReceipt(it)
                             viewModel.dismissDetail()
                         }

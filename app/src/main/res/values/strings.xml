@@ -65,4 +65,5 @@
     <string name="google_client_id">
         798538506657-g2dtje2olob3i8n5rrtqetsnbfse0v2r.apps.googleusercontent.com
     </string>
+    <string name="admob_banner_ad_unit_id">ca-app-pub-3940256099942544/6300978111</string>
 </resources>

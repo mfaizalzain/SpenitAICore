@@ -104,6 +104,12 @@ class DashboardViewModel : ViewModel() {
     private val _isDetailVisible = MutableStateFlow(false)
     val isDetailVisible: StateFlow<Boolean> = _isDetailVisible
 
+    private val _isEditVisible = MutableStateFlow(false)
+    val isEditVisible: StateFlow<Boolean> = _isEditVisible
+
+    private val _editingReceipt = MutableStateFlow<Receipt?>(null)
+    val editingReceipt: StateFlow<Receipt?> = _editingReceipt
+
     private val _isBusy = MutableStateFlow(false)
     val isBusy: StateFlow<Boolean> = _isBusy
 
@@ -213,7 +219,10 @@ class DashboardViewModel : ViewModel() {
             "Daily avg ${CurrencyFormatter.format(avgDaily, currency)} \u00B7 Tax ${CurrencyFormatter.formatInt(taxTotal, currency)}"
         }
 
-        _recentReceipts.value = allReceipts.sortedByDescending { it.date }.take(5)
+        _recentReceipts.value = allReceipts
+            .sortedWith(compareByDescending<com.fmz.spenitaicore.data.db.entity.Receipt> { it.date }
+                .thenByDescending { it.createdAt })
+            .take(5)
     }
 
     private fun updateFinancialStatus(safeToSpend: Double, totalIncome: Double) {
@@ -245,6 +254,47 @@ class DashboardViewModel : ViewModel() {
     fun dismissDetail() {
         _isDetailVisible.value = false
         _selectedReceipt.value = null
+    }
+
+    fun startEdit(receipt: Receipt) {
+        _editingReceipt.value = receipt
+        _isEditVisible.value = true
+        _isDetailVisible.value = false
+    }
+
+    fun dismissEdit() {
+        _isEditVisible.value = false
+        _editingReceipt.value = null
+    }
+
+    fun saveEdit(
+        merchant: String,
+        amountText: String,
+        category: String,
+        notes: String,
+        date: String,
+        isTaxDeductible: Boolean = false,
+        taxCategory: String = ""
+    ) {
+        viewModelScope.launch {
+            val receipt = _editingReceipt.value ?: return@launch
+            val amount = amountText.toDoubleOrNull()
+            if (merchant.isBlank() || amount == null || amount <= 0) return@launch
+            val updated = receipt.copy(
+                merchant = merchant.trim(),
+                total = amount,
+                category = category.ifBlank { "General" },
+                notes = notes.trim().ifBlank { null },
+                date = date,
+                isTaxDeductible = isTaxDeductible,
+                taxYear = if (isTaxDeductible) date.substring(0, 4) else null,
+                taxCategory = if (isTaxDeductible) taxCategory.ifBlank { null } else null
+            )
+            receiptRepo.saveReceipt(updated)
+            _isEditVisible.value = false
+            _editingReceipt.value = null
+            loadData()
+        }
     }
 
     fun deleteReceipt(receipt: Receipt) {

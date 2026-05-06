@@ -11,6 +11,7 @@ import com.fmz.spenitaicore.data.db.entity.ReceiptItem
 import com.fmz.spenitaicore.data.db.entity.SharedImportItem
 import com.fmz.spenitaicore.data.db.entity.SharedImportKind
 import com.fmz.spenitaicore.data.db.entity.SharedImportStatus
+import com.fmz.spenitaicore.data.notification.ImportNotificationHelper
 import com.fmz.spenitaicore.util.DateUtils
 import com.fmz.spenitaicore.util.PendingSharedFiles
 import com.fmz.spenitaicore.util.FileUtils
@@ -186,6 +187,20 @@ class SharedImportsViewModel : ViewModel() {
                 }
             }
             refreshSummary()
+            notifyImportResult(currentItem.id, currentItem.displayName)
+        }
+    }
+
+    private fun notifyImportResult(itemId: String, displayName: String) {
+        val item = _imports.value.firstOrNull { it.id == itemId } ?: return
+        when (item.status) {
+            SharedImportStatus.Completed ->
+                ImportNotificationHelper.showSuccess(appContext, displayName, item.statusMessage ?: "")
+            SharedImportStatus.Failed ->
+                ImportNotificationHelper.showFailed(appContext, displayName, item.statusMessage ?: "")
+            SharedImportStatus.Duplicate ->
+                ImportNotificationHelper.showDuplicate(appContext, displayName)
+            else -> {}
         }
     }
 

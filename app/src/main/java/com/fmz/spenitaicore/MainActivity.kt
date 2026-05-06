@@ -11,6 +11,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import com.fmz.spenitaicore.ui.navigation.SpenItNavHost
 import com.fmz.spenitaicore.ui.theme.SpenItTheme
+import com.fmz.spenitaicore.data.notification.ImportNotificationHelper
 import com.fmz.spenitaicore.util.FileUtils
 import com.fmz.spenitaicore.util.PendingSharedFiles
 import kotlinx.coroutines.channels.Channel
@@ -27,8 +28,10 @@ class MainActivity : AppCompatActivity() {
 
         val app = application as SpenItApp
 
-        // Handle incoming shared files
         handleSharedIntent(intent)
+        if (intent.getBooleanExtra(ImportNotificationHelper.EXTRA_NAVIGATE_TO_IMPORTS, false)) {
+            navigateToSharedImports.trySend(Unit)
+        }
 
         setContent {
             val shareSignal by sharedImportSignal
@@ -47,6 +50,9 @@ class MainActivity : AppCompatActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handleSharedIntent(intent)
+        if (intent.getBooleanExtra(ImportNotificationHelper.EXTRA_NAVIGATE_TO_IMPORTS, false)) {
+            navigateToSharedImports.trySend(Unit)
+        }
     }
 
     private fun handleSharedIntent(intent: Intent?) {

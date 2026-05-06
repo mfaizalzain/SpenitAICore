@@ -109,6 +109,9 @@ dependencies {
     // Google Sign-In with Drive scope (for backup)
     implementation("com.google.android.gms:play-services-auth:21.3.0")
 
+    // Google AdMob
+    implementation("com.google.android.gms:play-services-ads:23.6.0")
+
     // WorkManager (nightly backup scheduling)
     implementation("androidx.work:work-runtime-ktx:2.9.1")
 
