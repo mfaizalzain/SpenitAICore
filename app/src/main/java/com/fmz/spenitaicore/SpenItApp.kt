@@ -7,6 +7,7 @@ import com.fmz.spenitaicore.data.repository.IncomeRepository
 import com.fmz.spenitaicore.data.preferences.AppPreferences
 import com.fmz.spenitaicore.ai.AiCoreService
 import com.fmz.spenitaicore.data.auth.GoogleAuthService
+import com.fmz.spenitaicore.data.export.ExportService
 
 class SpenItApp : Application() {
 
@@ -48,5 +49,9 @@ class AppContainer(context: Application) {
 
     val googleAuthService: GoogleAuthService by lazy {
         GoogleAuthService(context)
+    }
+
+    val exportService: ExportService by lazy {
+        ExportService(context, receiptRepository)
     }
 }
