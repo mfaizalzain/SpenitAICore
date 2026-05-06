@@ -87,8 +87,35 @@ class ReceiptScanViewModel(
     }
 
     fun setImageUri(uri: Uri) {
-        _imagePath.value = uri.toString()
-        _hasImage.value = true
+        try {
+            val context = SpenItApp.instance
+            val imagesDir = java.io.File(context.filesDir, "images")
+            imagesDir.mkdirs()
+
+            val extension = context.contentResolver.getType(uri)?.let { mime ->
+                when {
+                    mime.contains("pdf", ignoreCase = true) -> ".pdf"
+                    mime.contains("png", ignoreCase = true) -> ".png"
+                    else -> ".jpg"
+                }
+            } ?: ".jpg"
+
+            val prefix = if (isIncome) "income" else "expense"
+            val file = java.io.File(imagesDir, "${prefix}_${System.currentTimeMillis()}$extension")
+
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                file.outputStream().use { output ->
+                    input.copyTo(output)
+                }
+            }
+
+            _imagePath.value = file.absolutePath
+            _hasImage.value = true
+        } catch (e: Exception) {
+            Log.e("ReceiptScanVM", "Failed to copy URI to internal storage, falling back", e)
+            _imagePath.value = uri.toString()
+            _hasImage.value = true
+        }
     }
 
     fun extractReceiptData() {
@@ -189,7 +216,8 @@ class ReceiptScanViewModel(
                         currency = _currency.value,
                         date = _date.value,
                         notes = _notes.value?.trim()?.ifBlank { null },
-                        category = _category.value
+                        category = _category.value,
+                        imagePath = _imagePath.value
                     )
                     incomeRepo.saveIncomeEntry(entry)
                 } else {

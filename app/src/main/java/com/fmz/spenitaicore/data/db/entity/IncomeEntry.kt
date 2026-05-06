@@ -13,6 +13,7 @@ data class IncomeEntry(
     @ColumnInfo(name = "currency") val currency: String = "$",
     @ColumnInfo(name = "date") val date: String = "", // yyyy-MM-dd
     @ColumnInfo(name = "notes") val notes: String? = null,
+    @ColumnInfo(name = "image_path") val imagePath: String? = null,
     @ColumnInfo(name = "is_recurring") val isRecurring: Boolean = false,
     @ColumnInfo(name = "recurrence_interval") val recurrenceInterval: String? = null,
     @ColumnInfo(name = "is_from_bank_import") val isFromBankImport: Boolean = false,
@@ -32,6 +33,12 @@ data class IncomeEntry(
             "Commision" -> "\uD83E\uDD1D"
             else -> "\uD83D\uDCB0"
         }
+
+    val isPdf: Boolean
+        get() = imagePath?.endsWith(".pdf", ignoreCase = true) == true
+
+    val isImage: Boolean
+        get() = !imagePath.isNullOrEmpty() && !isPdf
 }
 
 object IncomeSources {

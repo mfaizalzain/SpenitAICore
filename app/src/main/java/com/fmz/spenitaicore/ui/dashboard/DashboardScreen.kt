@@ -263,6 +263,51 @@ fun DashboardScreen(
         title = "Expense Details"
     ) {
         Column {
+            // Show original document image if available
+            val imageFile = selectedReceipt?.imagePath
+                ?.takeIf { it.isNotEmpty() }
+                ?.let { java.io.File(it) }
+            if (imageFile != null && imageFile.exists()) {
+                if (selectedReceipt?.isPdf == true) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Filled.PictureAsPdf,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(40.dp)
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text("PDF Document", fontWeight = FontWeight.SemiBold)
+                                Text(imageFile.name, style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    }
+                } else {
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        coil.compose.AsyncImage(
+                            model = imageFile,
+                            contentDescription = "Expense document",
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 300.dp),
+                            contentScale = androidx.compose.ui.layout.ContentScale.Fit
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+
             selectedReceipt?.let { receipt ->
                 Text(
                     text = receipt.merchant,

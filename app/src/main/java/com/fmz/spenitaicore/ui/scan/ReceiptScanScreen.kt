@@ -64,7 +64,9 @@ fun ReceiptScanScreen(
             val bitmap = result.data?.extras?.get("data") as? android.graphics.Bitmap
             if (bitmap != null) {
                 try {
-                    val file = java.io.File(context.cacheDir, "receipt_${System.currentTimeMillis()}.jpg")
+                    val imagesDir = java.io.File(context.filesDir, "images")
+                    imagesDir.mkdirs()
+                    val file = java.io.File(imagesDir, "expense_${System.currentTimeMillis()}.jpg")
                     file.outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 95, it) }
                     viewModel.setImage(file.absolutePath)
                 } catch (e: Exception) {

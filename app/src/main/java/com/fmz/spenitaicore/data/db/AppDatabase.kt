@@ -20,7 +20,7 @@ import com.fmz.spenitaicore.data.db.entity.UserProfile
         IncomeEntry::class,
         UserProfile::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

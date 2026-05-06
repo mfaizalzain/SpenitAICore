@@ -10,6 +10,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -374,6 +375,51 @@ fun ExpensesScreen(
         title = "Expense Details"
     ) {
         Column {
+            // Show original document image if available
+            val imageFile = selectedReceipt?.imagePath
+                ?.takeIf { it.isNotEmpty() }
+                ?.let { java.io.File(it) }
+            if (imageFile != null && imageFile.exists()) {
+                if (selectedReceipt?.isPdf == true) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Filled.PictureAsPdf,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(40.dp)
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text("PDF Document", fontWeight = FontWeight.SemiBold)
+                                Text(imageFile.name, style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    }
+                } else {
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        coil.compose.AsyncImage(
+                            model = imageFile,
+                            contentDescription = "Expense document",
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 300.dp),
+                            contentScale = ContentScale.Fit
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+
             selectedReceipt?.let { receipt ->
                 Text(receipt.merchant, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(8.dp))
