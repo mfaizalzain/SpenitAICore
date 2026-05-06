@@ -27,6 +27,7 @@ import com.fmz.spenitaicore.ui.scan.ReceiptScanScreen
 import com.fmz.spenitaicore.ui.scan.PaySlipScanScreen
 import com.fmz.spenitaicore.ui.sharedimports.SharedImportsScreen
 import com.fmz.spenitaicore.viewmodel.*
+import kotlinx.coroutines.flow.Flow
 
 sealed class Screen(val route: String, val title: String, val icon: ImageVector, val selectedIcon: ImageVector) {
     data object Dashboard : Screen("dashboard", "Dashboard", Icons.Outlined.Home, Icons.Filled.Home)
@@ -47,7 +48,8 @@ val bottomNavItems = listOf(
 @Composable
 fun SpenItNavHost(
     container: AppContainer,
-    sharedImportSignal: Int = 0
+    sharedImportSignal: Int = 0,
+    navigateToImportsFlow: Flow<Unit>? = null
 ) {
     val navController = rememberNavController()
 
@@ -58,9 +60,23 @@ fun SpenItNavHost(
     // Determine start destination based on auth state
     val startDestination = if (authState.isLoggedIn) Screen.Dashboard.route else "login"
 
+    // Navigate to shared imports when a file is shared into the app.
+    // Uses a Channel/Flow from the Activity so navigation is decoupled from
+    // Compose state timing and works reliably from both onCreate and onNewIntent.
+    LaunchedEffect(Unit) {
+        navigateToImportsFlow?.collect {
+            navController.navigate("shared_imports") {
+                launchSingleTop = true
+            }
+        }
+    }
+
     // Auto-navigate to shared imports if files were shared into the app
-    LaunchedEffect(sharedImportSignal) {
-        if (sharedImportSignal > 0) {
+    // BEFORE the composable was created (e.g. cold-start share intent).
+    // This covers the edge case where the compose tree composes after
+    // handleSharedIntent already fired in onCreate.
+    if (sharedImportSignal > 0) {
+        LaunchedEffect(startDestination) {
             navController.navigate("shared_imports") {
                 launchSingleTop = true
             }

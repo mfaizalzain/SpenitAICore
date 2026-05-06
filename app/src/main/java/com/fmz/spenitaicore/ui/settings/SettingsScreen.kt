@@ -534,7 +534,7 @@ fun SettingsScreen(
                     )
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Text("SpenIt", fontWeight = FontWeight.Bold,
+                        Text("SpenIt AICore", fontWeight = FontWeight.Bold,
                             style = MaterialTheme.typography.titleMedium)
                         Text("Version 1.0.0", style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)

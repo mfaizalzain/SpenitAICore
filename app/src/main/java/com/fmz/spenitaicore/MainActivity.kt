@@ -13,8 +13,12 @@ import com.fmz.spenitaicore.ui.navigation.SpenItNavHost
 import com.fmz.spenitaicore.ui.theme.SpenItTheme
 import com.fmz.spenitaicore.util.FileUtils
 import com.fmz.spenitaicore.util.PendingSharedFiles
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.receiveAsFlow
 
 class MainActivity : AppCompatActivity() {
+
+    val navigateToSharedImports = Channel<Unit>(Channel.CONFLATED)
 
     private val sharedImportSignal = mutableIntStateOf(0)
 
@@ -32,7 +36,8 @@ class MainActivity : AppCompatActivity() {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     SpenItNavHost(
                         container = app.container,
-                        sharedImportSignal = shareSignal
+                        sharedImportSignal = shareSignal,
+                        navigateToImportsFlow = navigateToSharedImports.receiveAsFlow()
                     )
                 }
             }
@@ -50,7 +55,10 @@ class MainActivity : AppCompatActivity() {
         val uris = extractFileUris(intent)
         if (uris.isNotEmpty()) {
             val importedCount = uris.count { processSharedUri(it) }
-            if (importedCount > 0) sharedImportSignal.intValue += 1
+            if (importedCount > 0) {
+                sharedImportSignal.intValue += 1
+                navigateToSharedImports.trySend(Unit)
+            }
         }
     }
 

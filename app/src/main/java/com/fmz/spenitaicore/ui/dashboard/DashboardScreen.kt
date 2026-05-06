@@ -63,7 +63,7 @@ fun DashboardScreen(
     Scaffold(
         topBar = {
             CompactTopAppBar(
-                title = { Text("SpenIt") },
+                title = { Text("SpenIt AICore") },
                 actions = {
                     IconButton(onClick = onNavigateToSharedImports) {
                         Icon(Icons.Outlined.Inbox, contentDescription = "Shared Imports")
