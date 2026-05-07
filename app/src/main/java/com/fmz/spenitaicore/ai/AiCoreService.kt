@@ -43,6 +43,8 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.jsonArray
+import java.time.LocalDate
+import java.time.temporal.ChronoUnit
 
 class AiCoreService(
     private val context: Context,
@@ -797,41 +799,59 @@ class AiCoreService(
         }
     }
 
-    fun generateInsights(
+    suspend fun generateInsights(
         receipts: List<com.fmz.spenitaicore.data.db.entity.Receipt>,
         incomeEntries: List<com.fmz.spenitaicore.data.db.entity.IncomeEntry>,
         periodLabel: String,
-        currency: String
+        currency: String,
+        periodStart: String? = null,
+        periodEnd: String? = null
+    ): AiInsightResult {
+        val fallback = buildRuleBasedInsights(receipts, incomeEntries, periodLabel, currency, periodStart, periodEnd)
+        if (receipts.isEmpty()) return fallback
+
+        return try {
+            val model = getAvailableModel().model ?: return fallback
+            val prompt = buildInsightsPrompt(receipts, incomeEntries, fallback, periodLabel, currency, periodStart, periodEnd)
+            val request = GenerateContentRequest.Builder(TextPart(prompt)).build()
+            val response = inferenceMutex.withLock { model.generateContent(request) }
+            val jsonStr = response.candidates.firstOrNull()?.text?.trim() ?: return fallback
+            val jsonObj = parseFirstJsonObject(jsonStr) ?: return fallback
+            mergeAiInsightJson(jsonObj, fallback)
+        } catch (e: Exception) {
+            Log.e("AiCoreService", "Insight generation error", e)
+            fallback
+        }
+    }
+
+    private fun buildRuleBasedInsights(
+        receipts: List<com.fmz.spenitaicore.data.db.entity.Receipt>,
+        incomeEntries: List<com.fmz.spenitaicore.data.db.entity.IncomeEntry>,
+        periodLabel: String,
+        currency: String,
+        periodStart: String?,
+        periodEnd: String?
     ): AiInsightResult {
         val total = receipts.sumOf { it.total }
-        val avgDaily = if (receipts.isNotEmpty()) total / 30.0 else 0.0
+        val dayCount = insightDayCount(receipts, periodStart, periodEnd)
+        val avgDaily = if (dayCount > 0) total / dayCount else 0.0
         val taxDeductible = receipts.filter { it.isTaxDeductible }.sumOf { it.total }
+        val totalIncome = incomeEntries.sumOf { it.amount }
+        val netCash = totalIncome - total
 
         val categories = receipts.groupBy { it.category }
             .map { (cat, items) ->
+                val amount = items.sumOf { it.total }
                 CategoryBreakdown(
                     category = cat,
-                    amount = items.sumOf { it.total },
-                    percentage = if (total > 0) (items.sumOf { it.total } / total) * 100 else 0.0
+                    amount = amount,
+                    percentage = if (total > 0) (amount / total) * 100 else 0.0
                 )
             }
             .sortedByDescending { it.amount }
             .take(5)
 
-        val savingTips = listOf(
-            SavingTip(
-                title = "Review Subscriptions",
-                description = "Check if you're using all active subscriptions. The average person wastes 30% on unused subscriptions."
-            ),
-            SavingTip(
-                title = "Meal Planning",
-                description = "Planning weekly meals can reduce food expenses by 20-30% and minimize impulse purchases."
-            ),
-            SavingTip(
-                title = "Track Small Purchases",
-                description = "Daily small purchases (coffee, snacks) can add up to significant amounts. Try setting a weekly allowance."
-            )
-        )
+        val savingTips = buildRuleBasedSavingTips(categories, avgDaily, currency)
 
         // Weekly trend based on actual dates in the receipt list
         val dayNames = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
@@ -854,19 +874,27 @@ class AiCoreService(
 
         val topCategory = categories.firstOrNull()
         val summary = buildString {
-            append("Your spending for $periodLabel totals ${com.fmz.spenitaicore.util.CurrencyFormatter.formatInt(total, currency)}. ")
-            topCategory?.let {
-                append("Your highest category is ${it.category} at ${"%.0f".format(it.percentage)}% of total spending. ")
+            if (receipts.isEmpty()) {
+                append("No spending is recorded for $periodLabel yet.")
+                return@buildString
             }
+            append("You spent ${com.fmz.spenitaicore.util.CurrencyFormatter.formatInt(total, currency)} in $periodLabel. ")
+            topCategory?.let {
+                append("${it.category} is the largest category at ${"%.0f".format(it.percentage)}% of tracked spending. ")
+            }
+            if (totalIncome > 0) append("Net cash flow is ${com.fmz.spenitaicore.util.CurrencyFormatter.format(netCash, currency)}. ")
             if (taxDeductible > 0) {
                 append("You have ${com.fmz.spenitaicore.util.CurrencyFormatter.formatInt(taxDeductible, currency)} in tax-deductible expenses. ")
             }
         }
 
-        val keyFindings = listOf(
-            "Average daily spending: ${com.fmz.spenitaicore.util.CurrencyFormatter.format(avgDaily, currency)}",
-            "Total tracked: ${receipts.size} transactions across ${categories.size} categories"
-        )
+        val keyFindings = buildList {
+            add("Average daily spending: ${com.fmz.spenitaicore.util.CurrencyFormatter.format(avgDaily, currency)}")
+            add("Tracked ${receipts.size} transactions across ${categories.size} categories")
+            if (totalIncome > 0) add("Income minus spending: ${com.fmz.spenitaicore.util.CurrencyFormatter.format(netCash, currency)}")
+        }
+
+        val anomalyAlert = detectRuleBasedAnomaly(receipts, avgDaily, currency)
 
         return AiInsightResult(
             summary = summary.trim(),
@@ -875,8 +903,164 @@ class AiCoreService(
             categoryBreakdown = categories,
             weeklyTrend = normalizedTrend,
             taxDeductibleTotal = taxDeductible,
-            averageDailySpend = avgDaily
+            averageDailySpend = avgDaily,
+            anomalyAlert = anomalyAlert
         )
+    }
+
+    private fun buildInsightsPrompt(
+        receipts: List<com.fmz.spenitaicore.data.db.entity.Receipt>,
+        incomeEntries: List<com.fmz.spenitaicore.data.db.entity.IncomeEntry>,
+        fallback: AiInsightResult,
+        periodLabel: String,
+        currency: String,
+        periodStart: String?,
+        periodEnd: String?
+    ): String {
+        val topCategories = fallback.categoryBreakdown.joinToString("\n") {
+            "- ${it.category}: ${formatAmountForPrompt(it.amount, currency)} (${ "%.0f".format(it.percentage) }%)"
+        }.ifBlank { "- None" }
+        val recentTransactions = receipts.sortedByDescending { it.date }.take(30).joinToString("\n") {
+            "- ${it.date} | ${it.category} | ${it.merchant.ifBlank { "Unknown merchant" }} | ${formatAmountForPrompt(it.total, currency)}${if (it.isTaxDeductible) " | tax-deductible" else ""}"
+        }
+        val incomeSummary = incomeEntries.groupBy { it.category }
+            .map { (category, items) -> category to items.sumOf { it.amount } }
+            .sortedByDescending { it.second }
+            .joinToString("\n") { "- ${it.first}: ${formatAmountForPrompt(it.second, currency)}" }
+            .ifBlank { "- No income recorded" }
+
+        return """
+            You are the on-device financial insights engine for SpenIt AICore.
+            Analyze the user's tracked spending and income for the selected period.
+
+            Period:
+            - Label: $periodLabel
+            - Start: ${periodStart ?: "unknown"}
+            - End: ${periodEnd ?: "unknown"}
+            - Currency: $currency
+
+            Computed metrics:
+            - Total spending: ${formatAmountForPrompt(receipts.sumOf { it.total }, currency)}
+            - Average daily spending: ${formatAmountForPrompt(fallback.averageDailySpend, currency)}
+            - Tax-deductible spending: ${formatAmountForPrompt(fallback.taxDeductibleTotal, currency)}
+            - Transaction count: ${receipts.size}
+
+            Top categories:
+            $topCategories
+
+            Income by category:
+            $incomeSummary
+
+            Recent transactions:
+            $recentTransactions
+
+            Write grounded, specific, user-friendly insights. Do not invent transactions, income, budgets, subscriptions, or goals that are not visible in the data. Prefer concrete category names, amounts, and proportions. If data is thin, say so and give cautious next steps. Keep the tone practical and concise.
+
+            Return ONLY a valid JSON object with no markdown and no extra text:
+            {
+              "summary": "One concise paragraph, max 45 words.",
+              "keyFindings": ["2-3 short findings grounded in the data"],
+              "savingTips": [
+                {"title":"Action title","description":"Specific action based on this data, max 22 words.","potentialSaving":0.0,"icon":"lightbulb"}
+              ],
+              "anomalyAlert": "Only include if one merchant/category/day is unusually high; otherwise null"
+            }
+        """.trimIndent()
+    }
+
+    private fun mergeAiInsightJson(jsonObj: JsonObject, fallback: AiInsightResult): AiInsightResult {
+        val summary = jsonObj.stringValue("summary", "aiSummary", "analysis").ifBlank { fallback.summary }
+        val keyFindings = jsonObj.arrayValue("keyFindings", "key findings", "findings")
+            ?.mapNotNull { it.jsonPrimitive.contentOrNull?.trim() }
+            ?.filter { it.isNotBlank() }
+            ?.take(3)
+            ?.ifEmpty { null }
+            ?: fallback.keyFindings
+        val savingTips = jsonObj.arrayValue("savingTips", "saving tips", "tips")
+            ?.mapNotNull { it as? JsonObject }
+            ?.map {
+                SavingTip(
+                    title = it.stringValue("title").ifBlank { "Review spending" },
+                    description = it.stringValue("description", "tip").ifBlank { "Review this category for avoidable repeat expenses." },
+                    potentialSaving = it.amountValue("potentialSaving", "potential saving"),
+                    icon = it.stringValue("icon").ifBlank { "\uD83D\uDCA1" }
+                )
+            }
+            ?.take(3)
+            ?.ifEmpty { null }
+            ?: fallback.savingTips
+        val anomalyAlert = jsonObj.findValue("anomalyAlert", "anomaly alert", "alert")
+            ?.jsonPrimitive?.contentOrNull?.trim()
+            ?.takeIf { it.isNotBlank() && !it.equals("null", ignoreCase = true) }
+            ?: fallback.anomalyAlert
+
+        return fallback.copy(
+            summary = summary,
+            keyFindings = keyFindings,
+            savingTips = savingTips,
+            anomalyAlert = anomalyAlert
+        )
+    }
+
+    private fun insightDayCount(
+        receipts: List<com.fmz.spenitaicore.data.db.entity.Receipt>,
+        periodStart: String?,
+        periodEnd: String?
+    ): Int {
+        val start = periodStart?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+        val end = periodEnd?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+        if (start != null && end != null && !end.isBefore(start)) {
+            return ChronoUnit.DAYS.between(start, end).toInt() + 1
+        }
+        val dates = receipts.mapNotNull { runCatching { LocalDate.parse(it.date) }.getOrNull() }
+        if (dates.isEmpty()) return 0
+        return ChronoUnit.DAYS.between(dates.minOrNull(), dates.maxOrNull()).toInt().coerceAtLeast(0) + 1
+    }
+
+    private fun buildRuleBasedSavingTips(
+        categories: List<CategoryBreakdown>,
+        avgDaily: Double,
+        currency: String
+    ): List<SavingTip> {
+        val tips = mutableListOf<SavingTip>()
+        val top = categories.firstOrNull()
+        if (top != null && top.percentage >= 35.0) {
+            tips += SavingTip(
+                title = "Trim ${top.category}",
+                description = "A 10% reduction would save about ${formatAmountForPrompt(top.amount * 0.10, currency)} this period.",
+                potentialSaving = top.amount * 0.10
+            )
+        }
+        if (avgDaily > 0) {
+            tips += SavingTip(
+                title = "Set a daily guardrail",
+                description = "Keep daily spending below ${formatAmountForPrompt(avgDaily * 0.9, currency)} to trend 10% lower.",
+                potentialSaving = avgDaily * 0.1 * 30
+            )
+        }
+        tips += SavingTip(
+            title = "Check repeat purchases",
+            description = "Review recurring merchants and small frequent payments before the next pay cycle."
+        )
+        return tips.take(3)
+    }
+
+    private fun detectRuleBasedAnomaly(
+        receipts: List<com.fmz.spenitaicore.data.db.entity.Receipt>,
+        avgDaily: Double,
+        currency: String
+    ): String? {
+        if (receipts.size < 3 || avgDaily <= 0.0) return null
+        val largest = receipts.maxByOrNull { it.total } ?: return null
+        return if (largest.total >= avgDaily * 3) {
+            "${largest.merchant.ifBlank { largest.category }} is unusually high at ${formatAmountForPrompt(largest.total, currency)}."
+        } else {
+            null
+        }
+    }
+
+    private fun formatAmountForPrompt(amount: Double, currency: String): String {
+        return com.fmz.spenitaicore.util.CurrencyFormatter.format(amount, currency)
     }
 
 }

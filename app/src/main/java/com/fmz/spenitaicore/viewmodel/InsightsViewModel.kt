@@ -9,10 +9,10 @@ import com.fmz.spenitaicore.ai.SpendingInsights
 import com.fmz.spenitaicore.ai.SpendingTrend
 import com.fmz.spenitaicore.util.CurrencyFormatter
 import com.fmz.spenitaicore.util.DateUtils
-import com.fmz.spenitaicore.util.SalaryCycle
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.time.LocalDate
+import java.time.temporal.ChronoUnit
 
 class InsightsViewModel : ViewModel() {
 
@@ -115,57 +115,61 @@ class InsightsViewModel : ViewModel() {
     fun selectRange(range: String) {
         if (_selectedRange.value == range) return
         _selectedRange.value = range
+        _aiSummary.value = null
+        _keyFindings.value = emptyList()
+        _savingTips.value = emptyList()
+        _weeklyTrend.value = emptyList()
+        _anomalyAlert.value = null
         quietLoad()
     }
 
     private suspend fun applyInsights(forceAiRefresh: Boolean) {
         val currency = preferences.getDefaultCurrency()
-        val payDay = preferences.getSalaryPayDay()
         val now = LocalDate.now()
-        val cycle = SalaryCycle.getCurrentPeriod(payDay, now)
 
-        val from = when (_selectedRange.value) {
-            "QuarterToDate" -> DateUtils.daysAgo(90)
-            "YearToDate" -> DateUtils.startOfYear(now.year)
-            else -> DateUtils.daysAgo(30)
-        }
+        val range = selectedRangePeriod(_selectedRange.value, now)
+        val from = DateUtils.fromLocalDate(range.start)
+        val to = DateUtils.fromLocalDate(range.end)
 
         val receipts = receiptRepo.getReceiptsFromSync(from)
-        val thisCycleCost = receipts.filter { r ->
-            val d = DateUtils.toLocalDate(r.date)
-            SalaryCycle.isInPeriod(d, cycle)
-        }.sumOf { it.total }
+            .filter { it.date <= to }
+        val periodSpend = receipts.sumOf { it.total }
 
-        val lastReceipts = receiptRepo.getReceiptsFromSync(DateUtils.fromLocalDate(cycle.previousStart.minusMonths(1)))
-        val lastCycleCost = lastReceipts.filter { r ->
-            val d = DateUtils.toLocalDate(r.date)
-            !d.isBefore(cycle.previousStart) && !d.isAfter(cycle.previousEnd)
-        }.sumOf { it.total }
+        val previousReceipts = receiptRepo.getReceiptsFromSync(DateUtils.fromLocalDate(range.previousStart))
+            .filter { it.date <= DateUtils.fromLocalDate(range.previousEnd) }
+        val previousPeriodSpend = previousReceipts.sumOf { it.total }
 
-        val avgDaily = if (receipts.isNotEmpty()) thisCycleCost / 30.0 else 0.0
+        val daysElapsed = maxOf(1, ChronoUnit.DAYS.between(range.start, range.end).toInt() + 1)
+        val avgDaily = periodSpend / daysElapsed
         val taxTotal = receipts.filter { it.isTaxDeductible }.sumOf { it.total }
 
         val incomeEntries = incomeRepo.getIncomeEntriesFromSync(from)
+            .filter { it.date <= to }
 
-        _totalThisMonth.value = thisCycleCost
+        _totalThisMonth.value = periodSpend
         _averageDailySpend.value = avgDaily
         _taxDeductibleTotal.value = taxTotal
-        _periodSpendLabel.value = "Spending \u00B7 ${cycle.label}"
-        _totalThisMonthText.value = CurrencyFormatter.formatInt(thisCycleCost, currency)
+        _periodSpendLabel.value = "Spending \u00B7 ${range.label}"
+        _totalThisMonthText.value = CurrencyFormatter.formatInt(periodSpend, currency)
         _averageDailySpendText.value = CurrencyFormatter.format(avgDaily, currency)
         _taxDeductibleTotalText.value = CurrencyFormatter.formatInt(taxTotal, currency)
 
-        val pct = if (lastCycleCost > 0) (thisCycleCost - lastCycleCost) / lastCycleCost * 100 else 0.0
-        _isIncrease.value = pct >= 0
-        val arrow = if (pct >= 0) "\u2191" else "\u2193"
-        _monthOverMonthText.value = "$arrow ${"%.0f".format(kotlin.math.abs(pct))}%"
+        _monthOverMonthText.value = if (previousPeriodSpend > 0) {
+            val pct = (periodSpend - previousPeriodSpend) / previousPeriodSpend * 100
+            _isIncrease.value = pct >= 0
+            val arrow = if (pct >= 0) "\u2191" else "\u2193"
+            "$arrow ${"%.0f".format(kotlin.math.abs(pct))}%"
+        } else {
+            _isIncrease.value = false
+            "New period"
+        }
 
         val categories = receipts.groupBy { it.category }
             .map { (cat, items) ->
                 CategoryBreakdown(
                     category = cat,
                     amount = items.sumOf { it.total },
-                    percentage = if (thisCycleCost > 0) (items.sumOf { it.total } / thisCycleCost) * 100 else 0.0
+                    percentage = if (periodSpend > 0) (items.sumOf { it.total } / periodSpend) * 100 else 0.0
                 )
             }
             .sortedByDescending { it.amount }
@@ -176,7 +180,14 @@ class InsightsViewModel : ViewModel() {
         if (forceAiRefresh || _aiSummary.value == null) {
             _aiStatusText.value = "Generating insights..."
             try {
-                val result = aiCore.generateInsights(receipts, incomeEntries, cycle.label, currency)
+                val result = aiCore.generateInsights(
+                    receipts = receipts,
+                    incomeEntries = incomeEntries,
+                    periodLabel = range.label,
+                    currency = currency,
+                    periodStart = from,
+                    periodEnd = to
+                )
                 _aiSummary.value = result.summary
                 _keyFindings.value = result.keyFindings
                 _savingTips.value = result.savingTips
@@ -192,4 +203,66 @@ class InsightsViewModel : ViewModel() {
     fun setIsRefreshing(value: Boolean) {
         _isRefreshing.value = value
     }
+
+    private fun selectedRangePeriod(
+        selectedRange: String,
+        now: LocalDate
+    ): InsightRange {
+        return when (selectedRange) {
+            "QuarterToDate" -> {
+                val quarterStartMonth = ((now.monthValue - 1) / 3) * 3 + 1
+                val start = LocalDate.of(now.year, quarterStartMonth, 1)
+                val previousStart = start.minusMonths(3)
+                val previousQuarterEnd = start.minusDays(1)
+                InsightRange(
+                    start = start,
+                    end = now,
+                    previousStart = previousStart,
+                    previousEnd = previousEndForElapsed(previousStart, previousQuarterEnd, start, now),
+                    label = "QTD"
+                )
+            }
+            "YearToDate" -> {
+                val start = LocalDate.of(now.year, 1, 1)
+                val previousStart = LocalDate.of(now.year - 1, 1, 1)
+                val previousYearEnd = LocalDate.of(now.year - 1, 12, 31)
+                InsightRange(
+                    start = start,
+                    end = now,
+                    previousStart = previousStart,
+                    previousEnd = previousEndForElapsed(previousStart, previousYearEnd, start, now),
+                    label = "YTD"
+                )
+            }
+            else -> {
+                val start = now.minusDays(29)
+                InsightRange(
+                    start = start,
+                    end = now,
+                    previousStart = start.minusDays(30),
+                    previousEnd = start.minusDays(1),
+                    label = "Last 30 days"
+                )
+            }
+        }
+    }
+
+    private fun previousEndForElapsed(
+        previousStart: LocalDate,
+        previousHardEnd: LocalDate,
+        currentStart: LocalDate,
+        currentEnd: LocalDate
+    ): LocalDate {
+        val elapsedDays = ChronoUnit.DAYS.between(currentStart, currentEnd)
+        val candidate = previousStart.plusDays(elapsedDays)
+        return if (candidate.isAfter(previousHardEnd)) previousHardEnd else candidate
+    }
+
+    private data class InsightRange(
+        val start: LocalDate,
+        val end: LocalDate,
+        val previousStart: LocalDate,
+        val previousEnd: LocalDate,
+        val label: String
+    )
 }
