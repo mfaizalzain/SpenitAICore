@@ -285,27 +285,45 @@ class AiCoreService(
         currency: String
     ): BankStatementResult {
         Log.d("AiCoreService", "Starting bank statement extraction for: $imagePath")
+
+        val bitmaps: List<Bitmap> = withContext(Dispatchers.IO) {
+            if (isPdfInput(imagePath)) loadPdfPages(imagePath)
+            else loadImageBitmap(imagePath)?.let { listOf(it) } ?: emptyList()
+        }
+        if (bitmaps.isEmpty()) {
+            Log.w("AiCoreService", "No bitmaps loaded from $imagePath")
+            return BankStatementResult(errorMessage = "Could not load image. File may be unsupported or corrupted.")
+        }
+
+        // ── Primary path: ML Kit OCR + regex parser (fast, no AICore quota) ────
+        val textTransactions = mutableListOf<BankTransaction>()
+        for ((index, bitmap) in bitmaps.withIndex()) {
+            Log.d("AiCoreService", "OCR page ${index + 1}/${bitmaps.size}")
+            val lines = BankStatementParser.extractLines(bitmap)
+            Log.d("AiCoreService", "OCR page ${index + 1}: ${lines.size} lines extracted")
+            textTransactions += BankStatementParser.parseLines(lines)
+        }
+        val textDeduped = textTransactions.distinctBy { "${it.date}|${it.amount}|${it.description.take(40)}" }
+        Log.d("AiCoreService", "OCR+regex: ${textDeduped.size} transactions found")
+
+        if (textDeduped.size >= 5) {
+            return BankStatementResult(transactions = textDeduped)
+        }
+
+        // ── Fallback: Gemini Nano AI (with WakeLock to keep foreground status) ─
+        Log.d("AiCoreService", "OCR found ${textDeduped.size} transactions — falling back to AI")
         val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
         @Suppress("DEPRECATION")
         val wakeLock = powerManager.newWakeLock(
             PowerManager.SCREEN_BRIGHT_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP,
             "SpenItAICore:BankStatementExtraction"
         )
-        wakeLock.acquire(10 * 60 * 1000L) // 10 minutes max
+        wakeLock.acquire(10 * 60 * 1000L)
         return try {
             val modelResult = getAvailableModel()
             val model = modelResult.model ?: return BankStatementResult(
                 errorMessage = modelResult.errorMessage ?: "AI model not available."
             )
-
-            val bitmaps: List<Bitmap> = withContext(Dispatchers.IO) {
-                if (isPdfInput(imagePath)) loadPdfPages(imagePath)
-                else loadImageBitmap(imagePath)?.let { listOf(it) } ?: emptyList()
-            }
-            if (bitmaps.isEmpty()) {
-                Log.w("AiCoreService", "No bitmaps loaded from $imagePath")
-                return BankStatementResult(errorMessage = "Could not load image. File may be unsupported or corrupted.")
-            }
 
             var bankName = ""
             var accountLast4 = ""
@@ -314,36 +332,31 @@ class AiCoreService(
             var pageErrors = 0
 
             for ((index, bitmap) in bitmaps.withIndex()) {
-                Log.d("AiCoreService", "Processing page ${index + 1}/${bitmaps.size}")
+                Log.d("AiCoreService", "AI page ${index + 1}/${bitmaps.size}")
                 val pageResult = extractPageTransactions(model, bitmap)
-                if (pageResult == null) {
-                    pageErrors++
-                    continue
-                }
+                if (pageResult == null) { pageErrors++; continue }
                 if (bankName.isEmpty()) bankName = pageResult.bankName
                 if (accountLast4.isEmpty()) accountLast4 = pageResult.accountLast4
                 if (period.isEmpty()) period = pageResult.period
                 allTransactions += pageResult.transactions
             }
 
-            Log.d("AiCoreService", "Total transactions extracted: ${allTransactions.size}")
-            // Deduplicate across pages: same date + amount + description can appear at page boundaries
-            val deduped = allTransactions
-                .distinctBy { "${it.date}|${it.amount}|${it.description.take(40)}" }
-            Log.d("AiCoreService", "After dedup: ${deduped.size} transactions (removed ${allTransactions.size - deduped.size})")
-            if (deduped.isEmpty() && pageErrors > 0 && pageErrors == bitmaps.size) {
-                BankStatementResult(errorMessage = "AI failed to parse the document. Try a clearer image or different file.")
+            Log.d("AiCoreService", "AI total: ${allTransactions.size} transactions")
+            val aiDeduped = allTransactions.distinctBy { "${it.date}|${it.amount}|${it.description.take(40)}" }
+            // Prefer whichever method yielded more transactions
+            val best = if (aiDeduped.size >= textDeduped.size) aiDeduped else textDeduped
+            Log.d("AiCoreService", "Using ${if (best === aiDeduped) "AI" else "OCR"} result: ${best.size} transactions")
+
+            if (best.isEmpty() && pageErrors > 0 && pageErrors == bitmaps.size) {
+                BankStatementResult(errorMessage = "Could not extract transactions. Try a clearer image or different file.")
             } else {
-                BankStatementResult(
-                    bankName = bankName,
-                    accountLast4 = accountLast4,
-                    period = period,
-                    transactions = deduped
-                )
+                BankStatementResult(bankName = bankName, accountLast4 = accountLast4, period = period, transactions = best)
             }
         } catch (e: Exception) {
-            Log.e("AiCoreService", "Bank statement extraction error", e)
-            BankStatementResult(errorMessage = "Extraction error: ${e.message ?: "Unknown error"}")
+            Log.e("AiCoreService", "Bank statement AI fallback error", e)
+            // If AI also fails, return whatever OCR found (even if < 5)
+            if (textDeduped.isNotEmpty()) BankStatementResult(transactions = textDeduped)
+            else BankStatementResult(errorMessage = "Extraction error: ${e.message ?: "Unknown error"}")
         } finally {
             if (wakeLock.isHeld) wakeLock.release()
         }
