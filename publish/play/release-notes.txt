@@ -1,5 +1,0 @@
-<en-US>
-Beta release of SpenIt AICore.
-
-Includes receipt-based expense tracking, income summaries, spending insights, shared file imports, Google Drive backup, and secure sign-in options for early testing.
-</en-US>
