@@ -9,6 +9,7 @@ import android.graphics.Color
 import android.graphics.pdf.PdfRenderer
 import android.net.Uri
 import android.os.ParcelFileDescriptor
+import android.os.PowerManager
 import android.util.Log
 import com.fmz.spenitaicore.data.db.entity.IncomeSources
 import com.fmz.spenitaicore.data.preferences.AppPreferences
@@ -25,7 +26,13 @@ import com.google.mlkit.genai.prompt.ModelReleaseStage
 import com.google.mlkit.genai.prompt.generationConfig
 import com.google.mlkit.genai.prompt.modelConfig
 import com.google.mlkit.genai.common.FeatureStatus
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -79,12 +86,13 @@ class AiCoreService(
     private val stableModel = Generation.getClient()
 
     private val json = Json { ignoreUnknownKeys = true }
+    private val inferenceMutex = Mutex()
 
     suspend fun classifyFinancialDocument(imagePath: String): FinancialDocumentType {
         Log.d("AiCoreService", "Starting document classification for: $imagePath")
         return try {
             val bitmap = loadBitmapFromPath(imagePath) ?: return FinancialDocumentType.Unknown
-            val model = getAvailableModel() ?: return FinancialDocumentType.Unknown
+            val model = getAvailableModel().model ?: return FinancialDocumentType.Unknown
 
             val prompt = """
                 Analyze this financial document image and classify it into exactly one type.
@@ -104,7 +112,7 @@ class AiCoreService(
                 TextPart(prompt)
             ).build()
 
-            val response = model.generateContent(request)
+            val response = inferenceMutex.withLock { model.generateContent(request) }
             val jsonStr = response.candidates.firstOrNull()?.text?.trim()
                 ?: return FinancialDocumentType.Unknown
             val jsonObj = parseFirstJsonObject(jsonStr) ?: return FinancialDocumentType.Unknown
@@ -127,7 +135,7 @@ class AiCoreService(
         Log.d("AiCoreService", "Starting expense extraction for: $imagePath")
         return try {
             val bitmap = loadBitmapFromPath(imagePath) ?: return null
-            val model = getAvailableModel() ?: return null
+            val model = getAvailableModel().model ?: return null
 
             val prompt = """
                 Analyze this expense document image and extract the following information.
@@ -154,7 +162,7 @@ class AiCoreService(
                 TextPart(prompt)
             ).build()
 
-            val response = model.generateContent(request)
+            val response = inferenceMutex.withLock { model.generateContent(request) }
             val jsonStr = response.candidates.firstOrNull()?.text
                 ?.replace("```json", "")?.replace("```", "")?.trim()
                 ?: return null
@@ -196,7 +204,7 @@ class AiCoreService(
         Log.d("AiCoreService", "Starting income extraction for: $imagePath")
         return try {
             val bitmap = loadBitmapFromPath(imagePath) ?: return null
-            val model = getAvailableModel() ?: return null
+            val model = getAvailableModel().model ?: return null
 
             val prompt = """
                 Analyze this income document (pay slip or bank statement).
@@ -224,7 +232,7 @@ class AiCoreService(
                 TextPart(prompt)
             ).build()
 
-            val response = model.generateContent(request)
+            val response = inferenceMutex.withLock { model.generateContent(request) }
             val jsonStr = response.candidates.firstOrNull()?.text
                 ?.replace("```json", "")?.replace("```", "")?.trim()
                 ?: return null
@@ -277,9 +285,18 @@ class AiCoreService(
         currency: String
     ): BankStatementResult {
         Log.d("AiCoreService", "Starting bank statement extraction for: $imagePath")
+        val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+        @Suppress("DEPRECATION")
+        val wakeLock = powerManager.newWakeLock(
+            PowerManager.SCREEN_BRIGHT_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP,
+            "SpenItAICore:BankStatementExtraction"
+        )
+        wakeLock.acquire(10 * 60 * 1000L) // 10 minutes max
         return try {
-            val model = getAvailableModel()
-            if (model == null) return BankStatementResult(errorMessage = "AI model not available. Install Google AICore.")
+            val modelResult = getAvailableModel()
+            val model = modelResult.model ?: return BankStatementResult(
+                errorMessage = modelResult.errorMessage ?: "AI model not available."
+            )
 
             val bitmaps: List<Bitmap> = withContext(Dispatchers.IO) {
                 if (isPdfInput(imagePath)) loadPdfPages(imagePath)
@@ -310,19 +327,25 @@ class AiCoreService(
             }
 
             Log.d("AiCoreService", "Total transactions extracted: ${allTransactions.size}")
-            if (allTransactions.isEmpty() && pageErrors > 0 && pageErrors == bitmaps.size) {
+            // Deduplicate across pages: same date + amount + description can appear at page boundaries
+            val deduped = allTransactions
+                .distinctBy { "${it.date}|${it.amount}|${it.description.take(40)}" }
+            Log.d("AiCoreService", "After dedup: ${deduped.size} transactions (removed ${allTransactions.size - deduped.size})")
+            if (deduped.isEmpty() && pageErrors > 0 && pageErrors == bitmaps.size) {
                 BankStatementResult(errorMessage = "AI failed to parse the document. Try a clearer image or different file.")
             } else {
                 BankStatementResult(
                     bankName = bankName,
                     accountLast4 = accountLast4,
                     period = period,
-                    transactions = allTransactions
+                    transactions = deduped
                 )
             }
         } catch (e: Exception) {
             Log.e("AiCoreService", "Bank statement extraction error", e)
             BankStatementResult(errorMessage = "Extraction error: ${e.message ?: "Unknown error"}")
+        } finally {
+            if (wakeLock.isHeld) wakeLock.release()
         }
     }
 
@@ -332,95 +355,80 @@ class AiCoreService(
     ): BankStatementResult? {
         return try {
             val prompt = """
-                Analyze this bank statement page and extract all transaction data.
+                You are a bank statement parser. Extract all transaction data from this bank statement page.
+                Return ONLY valid JSON with no markdown, no explanation, no extra text.
 
-                EXTRACTION RULES:
+                STEP 1 — BANK METADATA (from header/logo area only):
+                - bankName: Full bank name from logo or header text.
+                  Known banks: Maybank, Maybank Islamic, CIMB Bank, Public Bank, HSBC, HSBC Amanah,
+                  Standard Chartered, OCBC, DBS, UOB, RHB, Hong Leong Bank, Affin Bank, Alliance Bank,
+                  AmBank, Bank Rakyat, Bank Islam, BSN, Citibank, Ryt Bank, YTL Digital Bank,
+                  Bank Muamalat, Bank Simpanan Nasional
+                - accountLast4: Last 4 digits of the primary account number shown.
+                  Examples: "162236-564519" → "4519"; "85 4480 3271" → "3271"; "001-169473-108" → "3108" is wrong → use "9108" or last 4 of the actual account part
+                  For account "001-169473-108": last segment is "108" which is only 3 digits — use last 4 of full number → "3108" is wrong, just take last 4 chars of "001169473108" → "3108". Actually extract the last 4 digits of the full account number string ignoring dashes and spaces.
+                - period: Statement period. Examples: "Mar 2026", "Apr 2026", "01/03/2026 - 31/03/2026", "1 Apr 2026 to 30 Apr 2026"
 
-                1. BANK METADATA (extract if visible anywhere on the page):
-                   - bankName: The bank's name (e.g., "Maybank", "CIMB Bank", "Public Bank", "HSBC", "Standard Chartered", "OCBC", "DBS", "UOB", "RHB", "Hong Leong Bank", "Affin Bank", "Alliance Bank", "AmBank", "Bank Rakyat", "Bank Islam", "BSN", "Citibank")
-                   - accountLast4: Last 4 digits of the account number
-                   - period: Statement period (e.g., "Jan 2025", "01/01/2025 - 31/01/2025", "January 2025")
+                STEP 2 — DATE PARSING (ALL dates must be output as YYYY-MM-DD):
 
-                2. TRANSACTION IDENTIFICATION:
-                   A transaction row typically has:
-                   - A date field
-                   - A description/narration field
-                   - One or more amount fields
+                Handle ALL of these formats:
+                a) DD/MM/YY or DD/MM/YYYY → "01/03/26" = 2026-03-01, "15/03/2026" = 2026-03-15
+                b) DDMmmYYYY (no separators) → "27Mar2026" = 2026-03-27, "01Apr2026" = 2026-04-01, "29Mar2026" = 2026-03-29
+                c) D MMM YYYY or DD MMM YYYY → "1 Apr 2026" = 2026-04-01, "27 Apr 2026" = 2026-04-27
+                d) MMM DD YYYY or MMM D YYYY → "Apr 1 2026" = 2026-04-01
+                e) YYYY-MM-DD → keep as-is
+                f) 2-digit year: 00–99 → 2000–2099 (e.g., "26" → "2026")
 
-                   IGNORE these non-transaction rows:
-                   - Opening balance, closing balance, running balance, available balance
-                   - Total debits, total credits, total transactions
-                   - Page totals, brought forward, carried forward
-                   - Interest earned, fees summary rows
-                   - Header rows with column names only
+                Month abbreviation map: Jan=01 Feb=02 Mar=03 Apr=04 May=05 Jun=06 Jul=07 Aug=08 Sep=09 Oct=10 Nov=11 Dec=12
 
-                3. DATE EXTRACTION (convert to YYYY-MM-DD):
-                   CRITICAL: Determine the date format used by the bank statement first, then parse consistently.
+                If a transaction row has no date (continuation of previous row), carry forward the last seen date.
+                If year is absent, use the year from the statement period header.
 
-                   STEP 1 - Identify the date format by looking for clues:
-                   - Check the statement period/header for format hints (e.g., "Statement Period: 01/01/2025 - 31/01/2025" suggests DD/MM/YYYY)
-                   - Look at multiple transaction dates to identify the pattern
-                   - If day values exceed 12 (e.g., "15/03/2025"), it's definitely DD/MM/YYYY
-                   - If month values exceed 12 (e.g., "03/15/2025"), it's definitely MM/DD/YYYY
-                   - Malaysian/Singapore/UK/Australian banks typically use DD/MM/YYYY
-                   - US banks typically use MM/DD/YYYY
+                STEP 3 — SKIP NON-TRANSACTION ROWS:
+                Do NOT include any of these as transactions:
+                - Balance rows: "Opening balance", "Closing balance", "Beginning balance", "Ending balance", "Balance brought forward", "Balance carried forward"
+                - Summary rows: "Total credit", "Total debit", "Total transactions", "Transaction turnover", "Transaction count", "Ending balance", "ENDING BALANCE", "BEGINNING BALANCE"
+                - Column headers or section dividers
+                - Account summary sections (e.g., "Your Portfolio at a Glance", "Summary of Your Portfolio")
+                - Page totals or sub-totals without a specific transaction date
 
-                   STEP 2 - Parse based on identified format:
-                   - DD/MM/YYYY or DD-MM-YYYY (day first) → convert to YYYY-MM-DD
-                   - MM/DD/YYYY or MM-DD-YYYY (month first) → convert to YYYY-MM-DD
-                   - YYYY/MM/DD or YYYY-MM-DD → keep as is
-                   - DD MMM YYYY (e.g., "15 Jan 2025") → convert to YYYY-MM-DD
-                   - MMM DD, YYYY (e.g., "Jan 15, 2025") → convert to YYYY-MM-DD
-                   - DD/MM/YY or MM/DD/YY → assume 20YY and convert to YYYY-MM-DD
+                STEP 4 — AMOUNT EXTRACTION:
 
-                   STEP 3 - Validation:
-                   - If parsed day > 31 or month > 12, you may have misidentified the format - try the alternative
-                   - If year is missing, use the statement period year
+                Layout A — Separate Deposits/Withdrawals or Credit/Debit columns (e.g., HSBC Amanah):
+                - Amount in Deposits or Credit column → positive number, type="credit"
+                - Amount in Withdrawals or Debit column → positive number stored as negative, type="debit"
+                - Ignore the "Balance" column entirely
 
-                   EXAMPLES:
-                   - "15/03/2025" in DD/MM format → "2025-03-15"
-                   - "03/15/2025" in MM/DD format → "2025-03-15"
-                   - "01/02/2025" - Use context: if other dates have days > 12, use DD/MM → "2025-02-01"
+                Layout B — Single amount column with trailing sign (e.g., Maybank M2U):
+                - "300.00+" or "1,309.00+" → positive, type="credit"
+                - "69.00-" or "200.00-" → negative, type="debit"
 
-                4. DESCRIPTION EXTRACTION:
-                   Look for fields labeled as: Description, Narration, Particulars, Reference, Transaction Details, Remarks, Payee, Counterparty, Merchant
-                   Extract the full description text. If there are multiple description fields, concatenate them with a space.
+                Layout C — Single amount column with leading sign or +/- prefix (e.g., Ryt Bank):
+                - "+1,280.00" or no sign with "From …" description → positive, type="credit"
+                - "-30.00" or no sign with "To …" description → negative, type="debit"
 
-                5. AMOUNT EXTRACTION - Handle all these patterns:
+                Layout D — CR/DR suffix: "1,309.00 CR" → credit, "100.00 DR" → debit
 
-                   Pattern A - Separate Credit/Debit columns:
-                   - Credit column may be labeled: Credit, CR, Money In, Deposit, +, Incoming
-                   - Debit column may be labeled: Debit, DR, Money Out, Withdrawal, -, Outgoing
-                   - If amount is in Credit column → positive amount, type="credit"
-                   - If amount is in Debit column → negative amount, type="debit"
+                Amount formatting rules:
+                - Thousand separator comma: "1,234.56" → 1234.56
+                - Bracket negatives: "(100.00)" → -100.00
+                - Strip currency symbols (RM, MYR, $, etc.)
+                - The running balance / statement balance column is NOT a transaction amount — ignore it
 
-                   Pattern B - Single Amount column with sign:
-                   - Amount starting with "+" or no sign in credit context → positive, type="credit"
-                   - Amount starting with "-" or in brackets like "(100.00)" → negative, type="debit"
+                STEP 5 — DESCRIPTION:
+                - Combine all text lines belonging to one transaction into a single string separated by spaces.
+                - For HSBC-style statements: merge all detail lines under a single date entry.
+                - For Maybank: include the main description line and sub-lines (e.g., merchant name, location, method).
+                - For Ryt Bank: include the full description including "To/From" prefix and transfer type.
+                - Remove redundant reference IDs only if they make the description unreadably long.
 
-                   Pattern C - CR/DR suffix:
-                   - "1,234.56 CR" → positive 1234.56, type="credit"
-                   - "1,234.56 DR" → negative 1234.56, type="debit"
+                STEP 6 — TRANSACTION TYPE RULES:
+                - type="credit": deposits, salary/income, refunds, incoming transfers, interest earned, government credits, tax refunds
+                - type="debit": withdrawals, purchases, payments, outgoing transfers, fees, ATM cash-out
+                - If unclear, infer from sign: positive amount → credit, negative amount → debit
 
-                   Pattern D - Running balance column:
-                   - Some statements show: Date | Description | Debit | Credit | Balance
-                   - The Balance column is NOT the transaction amount - ignore it
-                   - Use only the Debit/Credit columns for transaction amounts
-
-                6. AMOUNT FORMAT HANDLING:
-                   - Handle commas as thousand separators: "1,234.56" → 1234.56
-                   - Handle dots as thousand separators (European): "1.234,56" → 1234.56
-                   - Handle bracket notation for negatives: "(100.00)" → -100.00
-                   - Preserve the exact text shown in amountText field
-
-                7. TRANSACTION TYPE DETERMINATION:
-                   - "credit" for: deposits, incoming transfers, salary, refunds, interest earned, credits
-                   - "debit" for: withdrawals, outgoing transfers, purchases, payments, fees, debits
-                   - Default to "debit" if unclear (most transactions are expenses)
-
-                OUTPUT FORMAT:
-                Return ONLY a valid JSON object in exactly this format, with no markdown formatting and no extra text:
-                {"bankName":"Maybank","accountLast4":"1234","period":"Jan 2025","transactions":[{"date":"2025-01-03","description":"SALARY CREDIT ABC COMPANY","amount":3500.00,"amountText":"3,500.00","type":"credit"},{"date":"2025-01-05","description":"GROCERY STORE KL","amount":-62.40,"amountText":"62.40","type":"debit"},{"date":"2025-01-07","description":"ONLINE TRANSFER","amount":-500.00,"amountText":"500.00","type":"debit"},{"date":"2025-01-10","description":"REFUND FROM SHOPEE","amount":45.00,"amountText":"45.00","type":"credit"}]}
+                OUTPUT — strict JSON, no markdown fences:
+                {"bankName":"Maybank Islamic","accountLast4":"4519","period":"Mar 2026","transactions":[{"date":"2026-03-01","description":"GRABPAY-EC PETALING JAYA MYS SALE DEBIT","amount":-69.00,"type":"debit"},{"date":"2026-03-10","description":"IBK FUND TFR TO A/C MOHD FAIZAL Transfer MBB CT","amount":300.00,"type":"credit"},{"date":"2026-04-24","description":"TRANSFER FROM EXPRO GROUP MALAYSIA SDN SALARY","amount":10412.51,"type":"credit"},{"date":"2026-04-01","description":"To POKOK PAUH CIK NIE QR Transfer","amount":-12.00,"type":"debit"}]}
             """.trimIndent()
 
             val request = GenerateContentRequest.Builder(
@@ -428,7 +436,7 @@ class AiCoreService(
                 TextPart(prompt)
             ).build()
 
-            val response = model.generateContent(request)
+            val response = inferenceMutex.withLock { model.generateContent(request) }
             val jsonStr = response.candidates.firstOrNull()?.text
                 ?.replace("```json", "")?.replace("```", "")?.trim()
                 ?: return null
@@ -473,7 +481,7 @@ class AiCoreService(
                 else -> ParcelFileDescriptor.open(java.io.File(pdfPath), ParcelFileDescriptor.MODE_READ_ONLY)
             }
             val renderer = PdfRenderer(fd)
-            val pageCount = minOf(renderer.pageCount, 10)
+            val pageCount = minOf(renderer.pageCount, 20)
             for (i in 0 until pageCount) {
                 val page = renderer.openPage(i)
                 val maxDim = maxOf(page.width, page.height).coerceAtLeast(1)
@@ -495,36 +503,57 @@ class AiCoreService(
         }
     }
 
-    private suspend fun getAvailableModel(): GenerativeModel? {
+    private data class ModelResult(val model: GenerativeModel? = null, val errorMessage: String? = null)
+
+    private suspend fun getAvailableModel(): ModelResult {
         val candidates = listOf(
             "preview_full" to previewFullModel,
             "preview_fast" to previewFastModel,
             "stable_default" to stableModel
         )
 
+        var anyDownloading = false
+        var downloadTriggered = false
+
         for ((name, model) in candidates) {
             val status = try {
                 model.checkStatus()
             } catch (e: Exception) {
-                Log.w("AiCoreService", "Model status check failed for $name", e)
+                Log.w("AiCoreService", "Model status check failed for $name: ${e.message}")
                 continue
             }
 
-            if (status == FeatureStatus.AVAILABLE) {
-                val baseModelName = try {
-                    model.getBaseModelName()
-                } catch (_: Exception) {
-                    name
-                }
-                Log.d("AiCoreService", "Using AICore model: $name ($baseModelName)")
-                return model
-            }
+            Log.e("AiCoreService", "AICore model $name status=$status")
 
-            Log.d("AiCoreService", "AICore model $name not available. Status=$status")
+            when (status) {
+                FeatureStatus.AVAILABLE -> {
+                    val baseModelName = try { model.getBaseModelName() } catch (_: Exception) { name }
+                    Log.e("AiCoreService", "Using AICore model: $name ($baseModelName)")
+                    return ModelResult(model = model)
+                }
+                FeatureStatus.DOWNLOADABLE -> {
+                    if (!downloadTriggered) {
+                        downloadTriggered = true
+                        model.download()
+                            .onEach { Log.e("AiCoreService", "Model $name download progress: $it") }
+                            .catch { Log.w("AiCoreService", "Model $name download error", it) }
+                            .launchIn(CoroutineScope(Dispatchers.IO))
+                        Log.e("AiCoreService", "Triggered download for model $name")
+                    }
+                }
+                FeatureStatus.DOWNLOADING -> anyDownloading = true
+                else -> Log.e("AiCoreService", "Model $name unavailable (status=$status)")
+            }
         }
 
-        Log.w("AiCoreService", "No AICore model is available")
-        return null
+        val msg = when {
+            anyDownloading || downloadTriggered ->
+                "AI model is downloading in the background. Please try again in a few minutes."
+            else ->
+                "AI model is not supported on this device."
+        }
+        Log.w("AiCoreService", "No AICore model ready: $msg")
+        return ModelResult(errorMessage = msg)
     }
 
     /**
@@ -672,8 +701,8 @@ class AiCoreService(
 
     private fun JsonObject.toBankTransaction(): BankTransaction {
         val type = stringValue("type", "transactionType", "transaction type", "drCr", "debitCredit")
-        val credit = amountTextValue("creditText", "credit text") ?: amountValue("credit", "moneyIn", "money in")
-        val debit = amountTextValue("debitText", "debit text") ?: amountValue("debit", "moneyOut", "money out")
+        val credit = amountTextValue("creditText", "credit text") ?: amountValue("credit", "moneyIn", "money in", "deposit", "deposits")
+        val debit = amountTextValue("debitText", "debit text") ?: amountValue("debit", "moneyOut", "money out", "withdrawal", "withdrawals")
         val amountFromText = amountTextValue("amountText", "amount text", "rawAmount", "raw amount")
         val amountFromNumber = amountValue("amount", "transactionAmount", "transaction amount", "value")
         val signedAmount = when {
@@ -684,13 +713,14 @@ class AiCoreService(
         val normalizedType = when {
             type.contains("credit", ignoreCase = true) || type.equals("cr", ignoreCase = true) -> "credit"
             type.contains("debit", ignoreCase = true) || type.equals("dr", ignoreCase = true) -> "debit"
+            signedAmount > 0.0 -> "credit"
             signedAmount < 0.0 -> "debit"
-            else -> "debit" // default to debit for bank statements — most transactions are expenses
+            else -> "debit"
         }
 
         return BankTransaction(
             date = stringValue("date", "transactionDate", "transaction date", "postingDate", "valueDate"),
-            description = stringValue("description", "details", "narration", "reference", "particulars"),
+            description = stringValue("description", "details", "narration", "reference", "particulars", "transactionDetails", "transaction details"),
             amount = if (normalizedType == "credit") kotlin.math.abs(signedAmount) else -kotlin.math.abs(signedAmount),
             type = normalizedType
         )

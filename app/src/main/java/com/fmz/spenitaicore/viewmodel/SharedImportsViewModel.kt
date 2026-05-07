@@ -107,8 +107,8 @@ class SharedImportsViewModel : ViewModel() {
     }
 
     private fun classifyImports(items: List<SharedImportItem>) {
-        items.forEach { item ->
-            viewModelScope.launch {
+        viewModelScope.launch {
+            items.forEach { item ->
                 setStatusMessage(item.id, "Classifying...")
                 val kind = aiCore.classifyFinancialDocument(item.filePath).toSharedImportKind()
                 val updatedItem = if (kind == SharedImportKind.Unknown) {
@@ -121,74 +121,75 @@ class SharedImportsViewModel : ViewModel() {
                 }
                 refreshSummary()
 
-                // Auto-process if classification succeeded
                 if (kind != SharedImportKind.Unknown) {
                     _imports.value = _imports.value.map {
                         if (it.id == item.id) it.copy(statusMessage = "Auto-processing ${kind.displayName()}...") else it
                     }
-                    processImport(updatedItem)
+                    doProcessImport(updatedItem)
                 }
             }
         }
     }
 
     fun processImport(item: SharedImportItem) {
-        viewModelScope.launch {
-            val currentItem = _imports.value.firstOrNull { it.id == item.id } ?: item
+        viewModelScope.launch { doProcessImport(item) }
+    }
+
+    private suspend fun doProcessImport(item: SharedImportItem) {
+        val currentItem = _imports.value.firstOrNull { it.id == item.id } ?: item
+        _imports.value = _imports.value.map {
+            if (it.id == currentItem.id) {
+                it.copy(status = SharedImportStatus.Processing, statusMessage = "Importing...")
+            } else {
+                it
+            }
+        }
+        refreshSummary()
+
+        try {
+            val currency = preferences.getDefaultCurrency()
+            val result = when (currentItem.kind) {
+                SharedImportKind.ExpenseReceipt -> importExpenseReceipt(currentItem, currency)
+                SharedImportKind.Income -> importIncome(currentItem, currency)
+                SharedImportKind.BankStatement -> importBankStatement(currentItem, currency)
+                SharedImportKind.Unknown -> ImportResult.failure("Choose a file type before importing")
+            }
+
             _imports.value = _imports.value.map {
                 if (it.id == currentItem.id) {
-                    it.copy(status = SharedImportStatus.Processing, statusMessage = "Importing...")
+                    if (result.isSuccess) {
+                        it.copy(
+                            status = SharedImportStatus.Completed,
+                            statusMessage = result.message,
+                            linkedReceiptId = result.receiptIds.firstOrNull() ?: 0,
+                            linkedIncomeEntryId = result.incomeEntryIds.firstOrNull() ?: 0,
+                            linkedReceiptIds = result.receiptIds,
+                            linkedIncomeEntryIds = result.incomeEntryIds
+                        )
+                    } else {
+                        it.copy(
+                            status = if (result.isDuplicate) {
+                                SharedImportStatus.Duplicate
+                            } else {
+                                SharedImportStatus.Failed
+                            },
+                            statusMessage = result.message
+                        )
+                    }
                 } else {
                     it
                 }
             }
-            refreshSummary()
-
-            try {
-                val currency = preferences.getDefaultCurrency()
-                val result = when (currentItem.kind) {
-                    SharedImportKind.ExpenseReceipt -> importExpenseReceipt(currentItem, currency)
-                    SharedImportKind.Income -> importIncome(currentItem, currency)
-                    SharedImportKind.BankStatement -> importBankStatement(currentItem, currency)
-                    SharedImportKind.Unknown -> ImportResult.failure("Choose a file type before importing")
-                }
-
-                _imports.value = _imports.value.map {
-                    if (it.id == currentItem.id) {
-                        if (result.isSuccess) {
-                            it.copy(
-                                status = SharedImportStatus.Completed,
-                                statusMessage = result.message,
-                                linkedReceiptId = result.receiptIds.firstOrNull() ?: 0,
-                                linkedIncomeEntryId = result.incomeEntryIds.firstOrNull() ?: 0,
-                                linkedReceiptIds = result.receiptIds,
-                                linkedIncomeEntryIds = result.incomeEntryIds
-                            )
-                        } else {
-                            it.copy(
-                                status = if (result.isDuplicate) {
-                                    SharedImportStatus.Duplicate
-                                } else {
-                                    SharedImportStatus.Failed
-                                },
-                                statusMessage = result.message
-                            )
-                        }
-                    } else {
-                        it
-                    }
-                }
-            } catch (e: Exception) {
-                _imports.value = _imports.value.map {
-                    if (it.id == currentItem.id) it.copy(
-                        status = SharedImportStatus.Failed,
-                        statusMessage = e.message ?: "Failed"
-                    ) else it
-                }
+        } catch (e: Exception) {
+            _imports.value = _imports.value.map {
+                if (it.id == currentItem.id) it.copy(
+                    status = SharedImportStatus.Failed,
+                    statusMessage = e.message ?: "Failed"
+                ) else it
             }
-            refreshSummary()
-            notifyImportResult(currentItem.id, currentItem.displayName)
         }
+        refreshSummary()
+        notifyImportResult(currentItem.id, currentItem.displayName)
     }
 
     private fun notifyImportResult(itemId: String, displayName: String) {
@@ -327,7 +328,7 @@ class SharedImportsViewModel : ViewModel() {
                     retryCount = it.retryCount + 1
                 ) else it
             }
-            processImport(item)
+            doProcessImport(item)
         }
     }
 
