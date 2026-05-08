@@ -9,13 +9,16 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import com.fmz.spenitaicore.data.db.entity.SharedImportItem
+import com.fmz.spenitaicore.data.db.entity.SharedImportKind
+import com.fmz.spenitaicore.data.db.entity.SharedImportStatus
 import com.fmz.spenitaicore.ui.navigation.SpenItNavHost
 import com.fmz.spenitaicore.ui.theme.SpenItTheme
 import com.fmz.spenitaicore.data.notification.ImportNotificationHelper
 import com.fmz.spenitaicore.util.FileUtils
-import com.fmz.spenitaicore.util.PendingSharedFiles
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.receiveAsFlow
+import java.util.UUID
 
 class MainActivity : AppCompatActivity() {
 
@@ -61,7 +64,8 @@ class MainActivity : AppCompatActivity() {
 
         val uris = extractFileUris(intent)
         if (uris.isNotEmpty()) {
-            val importedCount = uris.count { processSharedUri(it) }
+            val app = application as SpenItApp
+            val importedCount = uris.count { processSharedUri(app, it) }
             if (importedCount > 0) {
                 sharedImportSignal.intValue += 1
                 navigateToSharedImports.trySend(Unit)
@@ -94,13 +98,20 @@ class MainActivity : AppCompatActivity() {
         return uris.distinct()
     }
 
-    private fun processSharedUri(uri: Uri): Boolean {
-        // Copy file to app cache for persistent access
-        val localFile = FileUtils.copySharedFileToCache(this, uri)
+    private fun processSharedUri(app: SpenItApp, uri: Uri): Boolean {
+        val localFile = FileUtils.copySharedFileToImports(this, uri)
         return if (localFile != null) {
             val displayName = FileUtils.getDisplayName(this, uri)
                 ?: localFile.name
-            PendingSharedFiles.add(localFile.absolutePath, displayName)
+            app.container.sharedImportStore.add(
+                SharedImportItem(
+                    id = UUID.randomUUID().toString(),
+                    filePath = localFile.absolutePath,
+                    displayName = displayName,
+                    kind = SharedImportKind.Unknown,
+                    status = SharedImportStatus.NeedsReview
+                )
+            )
             true
         } else {
             false

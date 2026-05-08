@@ -1,5 +1,8 @@
 package com.fmz.spenitaicore.data.db.entity
 
+import kotlinx.serialization.Serializable
+
+@Serializable
 enum class SharedImportKind {
     Unknown,
     ExpenseReceipt,
@@ -7,6 +10,7 @@ enum class SharedImportKind {
     BankStatement
 }
 
+@Serializable
 enum class SharedImportStatus {
     NeedsReview,
     Processing,
@@ -17,6 +21,7 @@ enum class SharedImportStatus {
     Duplicate
 }
 
+@Serializable
 data class SharedImportItem(
     val id: String,
     val filePath: String,

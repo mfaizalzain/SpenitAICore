@@ -31,13 +31,18 @@ fun SharedImportsScreen(
     pendingImportSignal: Int = 0,
     onNavigateBack: () -> Unit,
     onNavigateToEditReceipt: (Int) -> Unit = {},
-    onNavigateToEditIncome: (Int) -> Unit = {}
+    onNavigateToEditIncome: (Int) -> Unit = {},
+    onImportCountChanged: (Int) -> Unit = {}
 ) {
     val imports by viewModel.imports.collectAsStateWithLifecycle()
     val pendingCount by viewModel.pendingCount.collectAsStateWithLifecycle()
     val isBusy by viewModel.isBusy.collectAsStateWithLifecycle()
     val navigateToEdit by viewModel.navigateToEdit.collectAsStateWithLifecycle()
     val unclassifiedCount = imports.count { it.kind == SharedImportKind.Unknown }
+
+    LaunchedEffect(imports.size) {
+        onImportCountChanged(imports.size)
+    }
 
     // Handle navigation to edit
     var showBankStatementDialog by remember { mutableStateOf<SharedImportsViewModel.EditNavigation.BankStatement?>(null) }

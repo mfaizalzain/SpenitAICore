@@ -60,6 +60,9 @@ fun SpenItNavHost(
     // Determine start destination based on auth state
     val startDestination = if (authState.isLoggedIn) Screen.Dashboard.route else "login"
     var pendingSharedImportNavigation by remember { mutableStateOf(sharedImportSignal > 0) }
+    var sharedImportCount by remember {
+        mutableIntStateOf(container.sharedImportStore.load().size)
+    }
 
     // Navigate to shared imports when a file is shared into the app.
     // Uses a Channel/Flow from the Activity so navigation is decoupled from
@@ -72,6 +75,7 @@ fun SpenItNavHost(
 
     LaunchedEffect(sharedImportSignal) {
         if (sharedImportSignal > 0) {
+            sharedImportCount = container.sharedImportStore.load().size
             pendingSharedImportNavigation = true
         }
     }
@@ -151,7 +155,8 @@ fun SpenItNavHost(
                     onNavigateToExpenses = { navController.navigate(Screen.Expenses.route) },
                     onNavigateToSettings = { navController.navigate(Screen.Settings.route) },
                     onNavigateToSharedImports = { navController.navigate("shared_imports") },
-                    onNavigateToPaySlipScan = { navController.navigate("payslip_scan") }
+                    onNavigateToPaySlipScan = { navController.navigate("payslip_scan") },
+                    sharedImportCount = sharedImportCount
                 )
             }
 
@@ -159,7 +164,8 @@ fun SpenItNavHost(
                 ExpensesScreen(
                     viewModel = expensesViewModel,
                     onNavigateToScan = { navController.navigate("receipt_scan") },
-                    onNavigateToSharedImports = { navController.navigate("shared_imports") }
+                    onNavigateToSharedImports = { navController.navigate("shared_imports") },
+                    sharedImportCount = sharedImportCount
                 )
             }
 
@@ -167,7 +173,8 @@ fun SpenItNavHost(
                 IncomeScreen(
                     viewModel = incomeViewModel,
                     onNavigateToScan = { navController.navigate("payslip_scan") },
-                    onNavigateToSharedImports = { navController.navigate("shared_imports") }
+                    onNavigateToSharedImports = { navController.navigate("shared_imports") },
+                    sharedImportCount = sharedImportCount
                 )
             }
 
@@ -242,6 +249,9 @@ fun SpenItNavHost(
                     },
                     onNavigateToEditIncome = { incomeEntryId ->
                         navController.navigate("payslip_scan?incomeEntryId=$incomeEntryId")
+                    },
+                    onImportCountChanged = { count ->
+                        sharedImportCount = count
                     }
                 )
             }

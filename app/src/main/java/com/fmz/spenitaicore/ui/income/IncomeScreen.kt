@@ -20,6 +20,7 @@ import com.fmz.spenitaicore.ui.components.DatePickerField
 import com.fmz.spenitaicore.ui.components.IncomeCard
 import com.fmz.spenitaicore.ui.components.BottomSheetDialog
 import com.fmz.spenitaicore.ui.components.FullBottomSheet
+import com.fmz.spenitaicore.ui.components.SharedImportsBadgeIcon
 import com.fmz.spenitaicore.viewmodel.IncomeViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -27,7 +28,8 @@ import com.fmz.spenitaicore.viewmodel.IncomeViewModel
 fun IncomeScreen(
     viewModel: IncomeViewModel,
     onNavigateToScan: () -> Unit,
-    onNavigateToSharedImports: () -> Unit
+    onNavigateToSharedImports: () -> Unit,
+    sharedImportCount: Int = 0
 ) {
     val incomeEntries by viewModel.incomeEntries.collectAsStateWithLifecycle()
     val totalThisMonthText by viewModel.totalThisMonthText.collectAsStateWithLifecycle()
@@ -49,7 +51,10 @@ fun IncomeScreen(
                 title = { Text("Income") },
                 actions = {
                     IconButton(onClick = onNavigateToSharedImports) {
-                        Icon(Icons.Outlined.Inbox, contentDescription = "Imports")
+                        SharedImportsBadgeIcon(
+                            count = sharedImportCount,
+                            contentDescription = "Imports"
+                        )
                     }
                     IconButton(onClick = onNavigateToScan) {
                         Icon(Icons.Filled.Add, contentDescription = "Add")

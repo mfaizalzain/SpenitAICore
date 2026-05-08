@@ -20,6 +20,7 @@ import com.fmz.spenitaicore.ui.components.ReceiptCard
 import com.fmz.spenitaicore.ui.components.BottomSheetDialog
 import com.fmz.spenitaicore.ui.components.FullBottomSheet
 import com.fmz.spenitaicore.ui.components.DatePickerField
+import com.fmz.spenitaicore.ui.components.SharedImportsBadgeIcon
 import com.fmz.spenitaicore.util.DateUtils
 import com.fmz.spenitaicore.viewmodel.ExpensesViewModel
 
@@ -31,7 +32,8 @@ import java.time.format.DateTimeFormatter
 fun ExpensesScreen(
     viewModel: ExpensesViewModel,
     onNavigateToScan: () -> Unit,
-    onNavigateToSharedImports: () -> Unit
+    onNavigateToSharedImports: () -> Unit,
+    sharedImportCount: Int = 0
 ) {
     val filteredReceipts by viewModel.filteredReceipts.collectAsStateWithLifecycle()
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
@@ -66,7 +68,10 @@ fun ExpensesScreen(
                 title = { Text("Expenses") },
                 actions = {
                     IconButton(onClick = onNavigateToSharedImports) {
-                        Icon(Icons.Outlined.Inbox, contentDescription = "Imports")
+                        SharedImportsBadgeIcon(
+                            count = sharedImportCount,
+                            contentDescription = "Imports"
+                        )
                     }
                     IconButton(onClick = onNavigateToScan) {
                         Icon(Icons.Filled.Add, contentDescription = "Add")

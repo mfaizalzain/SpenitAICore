@@ -4,6 +4,7 @@ import android.app.Application
 import com.fmz.spenitaicore.data.db.AppDatabase
 import com.fmz.spenitaicore.data.repository.ReceiptRepository
 import com.fmz.spenitaicore.data.repository.IncomeRepository
+import com.fmz.spenitaicore.data.repository.SharedImportStore
 import com.fmz.spenitaicore.data.preferences.AppPreferences
 import com.fmz.spenitaicore.ai.AiCoreService
 import com.fmz.spenitaicore.data.auth.GoogleAuthService
@@ -62,6 +63,10 @@ class AppContainer(context: Application) {
 
     val incomeRepository: IncomeRepository by lazy {
         IncomeRepository(database.incomeEntryDao())
+    }
+
+    val sharedImportStore: SharedImportStore by lazy {
+        SharedImportStore(context)
     }
 
     val aiCoreService: AiCoreService by lazy {

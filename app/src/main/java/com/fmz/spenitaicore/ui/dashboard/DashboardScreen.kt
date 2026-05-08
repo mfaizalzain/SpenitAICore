@@ -26,6 +26,7 @@ import com.fmz.spenitaicore.ui.components.BottomSheetDialog
 import com.fmz.spenitaicore.ui.components.DatePickerField
 import com.fmz.spenitaicore.ui.components.AiCoreInstallDialog
 import com.fmz.spenitaicore.ui.components.BannerAd
+import com.fmz.spenitaicore.ui.components.SharedImportsBadgeIcon
 import com.fmz.spenitaicore.ui.theme.SuccessGreen
 import com.fmz.spenitaicore.ui.theme.WarningOrange
 import com.fmz.spenitaicore.ui.theme.ErrorRed
@@ -41,7 +42,8 @@ fun DashboardScreen(
     onNavigateToExpenses: () -> Unit,
     onNavigateToSettings: () -> Unit,
     onNavigateToSharedImports: () -> Unit,
-    onNavigateToPaySlipScan: () -> Unit
+    onNavigateToPaySlipScan: () -> Unit,
+    sharedImportCount: Int = 0
 ) {
     val greeting by viewModel.greeting.collectAsStateWithLifecycle()
     val totalTodayText by viewModel.totalTodayText.collectAsStateWithLifecycle()
@@ -74,7 +76,7 @@ fun DashboardScreen(
                 title = { Text("SpenIt AICore") },
                 actions = {
                     IconButton(onClick = onNavigateToSharedImports) {
-                        Icon(Icons.Outlined.Inbox, contentDescription = "Shared Imports")
+                        SharedImportsBadgeIcon(count = sharedImportCount)
                     }
                     IconButton(onClick = onNavigateToSettings) {
                         Icon(Icons.Outlined.Settings, contentDescription = "Settings")

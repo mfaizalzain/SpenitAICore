@@ -28,6 +28,7 @@ class SharedImportsViewModel : ViewModel() {
     private val receiptRepo = container.receiptRepository
     private val incomeRepo = container.incomeRepository
     private val preferences = container.preferences
+    private val sharedImportStore = container.sharedImportStore
     private val appContext = SpenItApp.instance.applicationContext
 
     private val _imports = MutableStateFlow<List<SharedImportItem>>(emptyList())
@@ -40,46 +41,55 @@ class SharedImportsViewModel : ViewModel() {
     val isBusy: StateFlow<Boolean> = _isBusy
 
     init {
+        _imports.value = sharedImportStore.load()
+        refreshSummary()
         drainPendingFiles()
     }
 
     fun drainPendingFiles() {
+        val existingIds = _imports.value.map { it.id }.toSet()
+        val persisted = sharedImportStore.load()
         val pending = PendingSharedFiles.drain()
-        if (pending.isNotEmpty()) {
-            val newItems = pending.map { entry ->
-                SharedImportItem(
-                    id = UUID.randomUUID().toString(),
-                    filePath = entry.filePath,
-                    displayName = entry.displayName,
-                    kind = SharedImportKind.Unknown,
-                    status = SharedImportStatus.NeedsReview
-                )
-            }
-            _imports.value = _imports.value + newItems
-            refreshSummary()
-            classifyImports(newItems)
+        val pendingItems = pending.map { entry ->
+            SharedImportItem(
+                id = UUID.randomUUID().toString(),
+                filePath = entry.filePath,
+                displayName = entry.displayName,
+                kind = SharedImportKind.Unknown,
+                status = SharedImportStatus.NeedsReview
+            )
+        }
+        val merged = (persisted + pendingItems).distinctBy { it.id }
+        if (merged != _imports.value) {
+            setImports(merged)
+        }
+        val newItems = merged.filter { it.id !in existingIds }
+        val itemsToClassify = newItems.filter {
+            it.kind == SharedImportKind.Unknown && it.status == SharedImportStatus.NeedsReview
+        }
+        if (itemsToClassify.isNotEmpty()) {
+            classifyImports(itemsToClassify)
         }
     }
 
     fun addFiles(filePaths: List<String>, displayNames: List<String>) {
         val newItems = filePaths.zip(displayNames).map { (path, name) ->
-            SharedImportItem(
-                id = UUID.randomUUID().toString(),
-                filePath = path,
-                displayName = name,
-                kind = SharedImportKind.Unknown,
-                status = SharedImportStatus.NeedsReview
-            )
-        }
-        _imports.value = _imports.value + newItems
-        refreshSummary()
+                SharedImportItem(
+                    id = UUID.randomUUID().toString(),
+                    filePath = path,
+                    displayName = name,
+                    kind = SharedImportKind.Unknown,
+                    status = SharedImportStatus.NeedsReview
+                )
+            }
+        setImports(_imports.value + newItems)
         classifyImports(newItems)
     }
 
     fun addFileUris(uris: List<Uri>) {
         viewModelScope.launch(Dispatchers.IO) {
             val newItems = uris.mapNotNull { uri ->
-                val localFile = FileUtils.copySharedFileToCache(appContext, uri) ?: return@mapNotNull null
+                val localFile = FileUtils.copySharedFileToImports(appContext, uri) ?: return@mapNotNull null
                 val displayName = FileUtils.getDisplayName(appContext, uri) ?: localFile.name
                 SharedImportItem(
                     id = UUID.randomUUID().toString(),
@@ -91,8 +101,7 @@ class SharedImportsViewModel : ViewModel() {
             }
             if (newItems.isNotEmpty()) {
                 withContext(Dispatchers.Main) {
-                    _imports.value = _imports.value + newItems
-                    refreshSummary()
+                    setImports(_imports.value + newItems)
                     classifyImports(newItems)
                 }
             }
@@ -100,10 +109,9 @@ class SharedImportsViewModel : ViewModel() {
     }
 
     fun setImportKind(item: SharedImportItem, kind: SharedImportKind) {
-        _imports.value = _imports.value.map {
+        setImports(_imports.value.map {
             if (it.id == item.id) it.copy(kind = kind, statusMessage = null) else it
-        }
-        refreshSummary()
+        })
     }
 
     private fun classifyImports(items: List<SharedImportItem>) {
@@ -116,15 +124,14 @@ class SharedImportsViewModel : ViewModel() {
                 } else {
                     item.copy(kind = kind, statusMessage = "Detected ${kind.displayName()}")
                 }
-                _imports.value = _imports.value.map {
+                setImports(_imports.value.map {
                     if (it.id == item.id) updatedItem else it
-                }
-                refreshSummary()
+                })
 
                 if (kind != SharedImportKind.Unknown) {
-                    _imports.value = _imports.value.map {
+                    setImports(_imports.value.map {
                         if (it.id == item.id) it.copy(statusMessage = "Auto-processing ${kind.displayName()}...") else it
-                    }
+                    })
                     doProcessImport(updatedItem)
                 }
             }
@@ -137,14 +144,13 @@ class SharedImportsViewModel : ViewModel() {
 
     private suspend fun doProcessImport(item: SharedImportItem) {
         val currentItem = _imports.value.firstOrNull { it.id == item.id } ?: item
-        _imports.value = _imports.value.map {
+        setImports(_imports.value.map {
             if (it.id == currentItem.id) {
                 it.copy(status = SharedImportStatus.Processing, statusMessage = "Importing...")
             } else {
                 it
             }
-        }
-        refreshSummary()
+        })
 
         try {
             val currency = preferences.getDefaultCurrency()
@@ -155,7 +161,7 @@ class SharedImportsViewModel : ViewModel() {
                 SharedImportKind.Unknown -> ImportResult.failure("Choose a file type before importing")
             }
 
-            _imports.value = _imports.value.map {
+            setImports(_imports.value.map {
                 if (it.id == currentItem.id) {
                     if (result.isSuccess) {
                         it.copy(
@@ -179,16 +185,15 @@ class SharedImportsViewModel : ViewModel() {
                 } else {
                     it
                 }
-            }
+            })
         } catch (e: Exception) {
-            _imports.value = _imports.value.map {
+            setImports(_imports.value.map {
                 if (it.id == currentItem.id) it.copy(
                     status = SharedImportStatus.Failed,
                     statusMessage = e.message ?: "Failed"
                 ) else it
-            }
+            })
         }
-        refreshSummary()
         notifyImportResult(currentItem.id, currentItem.displayName)
     }
 
@@ -321,25 +326,33 @@ class SharedImportsViewModel : ViewModel() {
 
     fun retryImport(item: SharedImportItem) {
         viewModelScope.launch {
-            _imports.value = _imports.value.map {
+            setImports(_imports.value.map {
                 if (it.id == item.id) it.copy(
                     status = SharedImportStatus.NeedsReview,
                     statusMessage = null,
                     retryCount = it.retryCount + 1
                 ) else it
-            }
+            })
             doProcessImport(item)
         }
     }
 
     fun removeImport(item: SharedImportItem) {
-        _imports.value = _imports.value.filter { it.id != item.id }
-        refreshSummary()
+        setImports(_imports.value.filter { it.id != item.id })
     }
 
     fun clearCompleted() {
-        _imports.value = _imports.value.filter { it.status != SharedImportStatus.Completed }
+        setImports(_imports.value.filter { it.status != SharedImportStatus.Completed })
+    }
+
+    fun clearAll() {
+        setImports(emptyList())
+    }
+
+    private fun setImports(items: List<SharedImportItem>) {
+        _imports.value = items
         refreshSummary()
+        sharedImportStore.save(items)
     }
 
     private suspend fun saveReceiptIfNotDuplicate(receipt: Receipt): Int? {
@@ -367,9 +380,9 @@ class SharedImportsViewModel : ViewModel() {
     }
 
     private fun setStatusMessage(itemId: String, message: String?) {
-        _imports.value = _imports.value.map {
+        setImports(_imports.value.map {
             if (it.id == itemId) it.copy(statusMessage = message) else it
-        }
+        })
     }
 
     private fun FinancialDocumentType.toSharedImportKind(): SharedImportKind {

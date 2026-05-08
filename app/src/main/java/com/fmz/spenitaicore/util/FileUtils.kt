@@ -13,6 +13,31 @@ object FileUtils {
      */
     fun copySharedFileToCache(context: Context, sourceUri: Uri, prefix: String = "shared"): File? {
         return try {
+            copyUriToDirectory(context, sourceUri, context.cacheDir, prefix)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+
+    fun copySharedFileToImports(context: Context, sourceUri: Uri, prefix: String = "shared"): File? {
+        return try {
+            val importsDir = File(context.filesDir, "shared_imports")
+            if (!importsDir.exists()) importsDir.mkdirs()
+            copyUriToDirectory(context, sourceUri, importsDir, prefix)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+
+    private fun copyUriToDirectory(
+        context: Context,
+        sourceUri: Uri,
+        directory: File,
+        prefix: String
+    ): File? {
+        return try {
             val mimeType = context.contentResolver.getType(sourceUri)
             val displayName = getDisplayName(context, sourceUri) ?: "${prefix}_${System.currentTimeMillis()}"
             val extension = when {
@@ -29,7 +54,7 @@ object FileUtils {
             }
             val safeName = displayName.replace(Regex("[^a-zA-Z0-9._\\-]"), "_")
             val nameWithoutExt = safeName.substringBeforeLast('.', safeName)
-            val destFile = File(context.cacheDir, "${prefix}_${System.currentTimeMillis()}_$nameWithoutExt$extension")
+            val destFile = File(directory, "${prefix}_${System.currentTimeMillis()}_$nameWithoutExt$extension")
 
             context.contentResolver.openInputStream(sourceUri)?.use { input ->
                 destFile.outputStream().use { output ->
