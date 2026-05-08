@@ -59,27 +59,29 @@ fun SpenItNavHost(
 
     // Determine start destination based on auth state
     val startDestination = if (authState.isLoggedIn) Screen.Dashboard.route else "login"
+    var pendingSharedImportNavigation by remember { mutableStateOf(sharedImportSignal > 0) }
 
     // Navigate to shared imports when a file is shared into the app.
     // Uses a Channel/Flow from the Activity so navigation is decoupled from
     // Compose state timing and works reliably from both onCreate and onNewIntent.
     LaunchedEffect(Unit) {
         navigateToImportsFlow?.collect {
-            navController.navigate("shared_imports") {
-                launchSingleTop = true
-            }
+            pendingSharedImportNavigation = true
         }
     }
 
-    // Auto-navigate to shared imports if files were shared into the app
-    // BEFORE the composable was created (e.g. cold-start share intent).
-    // This covers the edge case where the compose tree composes after
-    // handleSharedIntent already fired in onCreate.
-    if (sharedImportSignal > 0) {
-        LaunchedEffect(startDestination) {
+    LaunchedEffect(sharedImportSignal) {
+        if (sharedImportSignal > 0) {
+            pendingSharedImportNavigation = true
+        }
+    }
+
+    LaunchedEffect(pendingSharedImportNavigation, authState.isLoggedIn) {
+        if (pendingSharedImportNavigation && authState.isLoggedIn) {
             navController.navigate("shared_imports") {
                 launchSingleTop = true
             }
+            pendingSharedImportNavigation = false
         }
     }
 

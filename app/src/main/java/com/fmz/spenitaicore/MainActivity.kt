@@ -49,6 +49,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        setIntent(intent)
         handleSharedIntent(intent)
         if (intent.getBooleanExtra(ImportNotificationHelper.EXTRA_NAVIGATE_TO_IMPORTS, false)) {
             navigateToSharedImports.trySend(Unit)
