@@ -104,6 +104,7 @@ class AiCoreService(
                 1. "income": income document, salary statement, wage statement, employer payment advice, income proof. Choose this ONLY when it is primarily an income document, not a general bank statement.
                 2. "expense": expense receipt, invoice, bill, purchase receipt, tax receipt. Choose this ONLY when it is primarily a merchant expense/invoice/bill.
                 3. "bankstatement": bank account statement or transaction list with multiple credits/debits/balances. Choose this when the document shows account balances, transaction rows, debit/credit columns, or a statement period.
+                4. If the document shows a single primary amount with a leading sign, use the sign to classify it: "+" means "income", "-" means "expense". If the primary amount has no leading sign, assume it is an "expense" unless the document is clearly a bank statement.
 
                 Return ONLY a JSON object in this exact format with no extra text or markdown:
                 {"type":"income"}
