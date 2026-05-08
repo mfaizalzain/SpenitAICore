@@ -44,6 +44,7 @@ class SharedImportsViewModel : ViewModel() {
         _imports.value = sharedImportStore.load()
         refreshSummary()
         drainPendingFiles()
+        classifyPendingImports()
     }
 
     fun drainPendingFiles() {
@@ -66,6 +67,17 @@ class SharedImportsViewModel : ViewModel() {
         val newItems = merged.filter { it.id !in existingIds }
         val itemsToClassify = newItems.filter {
             it.kind == SharedImportKind.Unknown && it.status == SharedImportStatus.NeedsReview
+        }
+        if (itemsToClassify.isNotEmpty()) {
+            classifyImports(itemsToClassify)
+        }
+    }
+
+    private fun classifyPendingImports() {
+        val itemsToClassify = _imports.value.filter {
+            it.kind == SharedImportKind.Unknown &&
+                it.status == SharedImportStatus.NeedsReview &&
+                it.statusMessage.isNullOrBlank()
         }
         if (itemsToClassify.isNotEmpty()) {
             classifyImports(itemsToClassify)
