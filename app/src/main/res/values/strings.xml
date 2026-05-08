@@ -67,6 +67,5 @@
     </string>
     <!-- TODO: Replace with your real AdMob App ID from the AdMob console before release -->
     <string name="admob_app_id">ca-app-pub-3940256099942544~3347511713</string>
-    <!-- TODO: Replace with your real banner ad unit ID before release -->
-    <string name="admob_banner_ad_unit_id">ca-app-pub-3940256099942544/6300978111</string>
+    <string name="admob_banner_ad_unit_id">ca-app-pub-1016705366714872/8483510731</string>
 </resources>

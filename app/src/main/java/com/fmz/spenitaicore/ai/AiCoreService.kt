@@ -961,7 +961,7 @@ class AiCoreService(
               "summary": "One concise paragraph, max 45 words.",
               "keyFindings": ["2-3 short findings grounded in the data"],
               "savingTips": [
-                {"title":"Action title","description":"Specific action based on this data, max 22 words.","potentialSaving":0.0,"icon":"lightbulb"}
+                {"title":"Action title","description":"Specific action based on this data, max 22 words.","potentialSaving":0.0,"icon":"💡"}
               ],
               "anomalyAlert": "Only include if one merchant/category/day is unusually high; otherwise null"
             }
@@ -983,7 +983,7 @@ class AiCoreService(
                     title = it.stringValue("title").ifBlank { "Review spending" },
                     description = it.stringValue("description", "tip").ifBlank { "Review this category for avoidable repeat expenses." },
                     potentialSaving = it.amountValue("potentialSaving", "potential saving"),
-                    icon = it.stringValue("icon").ifBlank { "\uD83D\uDCA1" }
+                    icon = it.stringValue("icon").normalizedSavingTipIcon()
                 )
             }
             ?.take(3)
@@ -1061,6 +1061,20 @@ class AiCoreService(
 
     private fun formatAmountForPrompt(amount: Double, currency: String): String {
         return com.fmz.spenitaicore.util.CurrencyFormatter.format(amount, currency)
+    }
+
+    private fun String.normalizedSavingTipIcon(): String {
+        val value = trim()
+        return when (value.lowercase()) {
+            "", "lightbulb", "bulb", "idea" -> "\uD83D\uDCA1"
+            "food", "meal", "meals", "groceries" -> "\uD83C\uDF7D\uFE0F"
+            "transport", "travel" -> "\uD83D\uDE97"
+            "shopping" -> "\uD83D\uDED2"
+            "subscription", "subscriptions", "recurring" -> "\uD83D\uDD01"
+            "tax" -> "\uD83E\uDDFE"
+            "save", "saving", "savings", "money" -> "\uD83D\uDCB0"
+            else -> value.takeIf { it.codePointCount(0, it.length) <= 2 } ?: "\uD83D\uDCA1"
+        }
     }
 
 }
