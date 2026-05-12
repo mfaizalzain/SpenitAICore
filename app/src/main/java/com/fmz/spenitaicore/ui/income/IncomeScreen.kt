@@ -106,29 +106,40 @@ fun IncomeScreen(
                 }
             }
 
-            // Search bar
-            OutlinedTextField(
+            // Search bar — compact
+            TextField(
                 value = searchQuery,
                 onValueChange = { viewModel.onSearchQueryChanged(it) },
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
-                placeholder = { Text("Search income... (#salary, >500, jan-mar)") },
-                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+                placeholder = { Text("Search income... (#salary, >500, jan-mar)",
+                    style = MaterialTheme.typography.bodySmall) },
+                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null,
+                    modifier = Modifier.size(18.dp)) },
                 trailingIcon = {
                     if (searchQuery.isNotEmpty()) {
-                        IconButton(onClick = {
-                            viewModel.onSearchQueryChanged("")
-                        }) {
-                            Icon(Icons.Filled.Close, contentDescription = "Clear")
+                        IconButton(onClick = { viewModel.onSearchQueryChanged("") },
+                            modifier = Modifier.size(24.dp)) {
+                            Icon(Icons.Filled.Close, contentDescription = "Clear",
+                                modifier = Modifier.size(16.dp))
                         }
                     } else {
-                        IconButton(onClick = { viewModel.applySearchFilters() }) {
-                            Icon(Icons.Filled.KeyboardArrowRight, contentDescription = "Search")
+                        IconButton(onClick = { viewModel.applySearchFilters() },
+                            modifier = Modifier.size(24.dp)) {
+                            Icon(Icons.Filled.KeyboardArrowRight, contentDescription = "Search",
+                                modifier = Modifier.size(16.dp))
                         }
                     }
                 },
-                singleLine = true
+                singleLine = true,
+                textStyle = MaterialTheme.typography.bodySmall,
+                colors = TextFieldDefaults.colors(
+                    focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    focusedIndicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
+                    unfocusedIndicatorColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                )
             )
 
             // Filter row
