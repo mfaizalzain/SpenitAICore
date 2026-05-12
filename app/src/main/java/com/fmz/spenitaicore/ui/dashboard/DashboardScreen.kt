@@ -39,7 +39,6 @@ import com.fmz.spenitaicore.viewmodel.ExpensesViewModel
 fun DashboardScreen(
     viewModel: DashboardViewModel,
     onNavigateToScan: () -> Unit,
-    onNavigateToInsights: () -> Unit,
     onNavigateToExpenses: () -> Unit,
     onNavigateToSettings: () -> Unit,
     onNavigateToSharedImports: () -> Unit,
@@ -216,8 +215,7 @@ fun DashboardScreen(
                     isUp = isSpendingUp,
                     incomeThisCycleText = totalIncomeThisMonthText,
                     dailyAvgText = averageDailySpendText,
-                    taxDeductibleText = taxDeductibleTotalText,
-                    onClickSeeAll = onNavigateToInsights
+                    taxDeductibleText = taxDeductibleTotalText
                 )
             }
 
@@ -257,20 +255,12 @@ fun DashboardScreen(
 
             // Recent receipts header
             item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Recent Expenses",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    TextButton(onClick = onNavigateToExpenses) {
-                        Text("View All")
-                    }
-                }
+                Text(
+                    text = "Recent Expenses",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
             }
 
             // Receipts list
@@ -869,7 +859,6 @@ fun InsightsAtGlanceCard(
     incomeThisCycleText: String,
     dailyAvgText: String,
     taxDeductibleText: String,
-    onClickSeeAll: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -891,9 +880,6 @@ fun InsightsAtGlanceCard(
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold
                 )
-                TextButton(onClick = onClickSeeAll, contentPadding = PaddingValues(horizontal = 8.dp)) {
-                    Text("See All", style = MaterialTheme.typography.labelMedium)
-                }
             }
 
             Spacer(modifier = Modifier.height(12.dp))

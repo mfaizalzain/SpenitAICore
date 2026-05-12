@@ -153,7 +153,6 @@ fun SpenItNavHost(
                 DashboardScreen(
                     viewModel = dashboardViewModel,
                     onNavigateToScan = { navController.navigate("receipt_scan") },
-                    onNavigateToInsights = { navController.navigate(Screen.Insights.route) },
                     onNavigateToExpenses = { navController.navigate(Screen.Expenses.route) },
                     onNavigateToSettings = { navController.navigate(Screen.Settings.route) },
                     onNavigateToSharedImports = { navController.navigate("shared_imports") },
