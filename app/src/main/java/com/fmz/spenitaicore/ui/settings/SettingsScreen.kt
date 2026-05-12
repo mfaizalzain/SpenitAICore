@@ -1,6 +1,7 @@
 package com.fmz.spenitaicore.ui.settings
 
 import android.content.Intent
+import android.net.Uri
 import android.Manifest
 import android.content.pm.PackageManager
 import android.widget.Toast
@@ -715,6 +716,48 @@ fun SettingsScreen(
                         icon = Icons.Outlined.FileDownload,
                         onClick = { viewModel.enableBackup() }
                     )
+                }
+            }
+
+            // Support section
+            item {
+                Divider(modifier = Modifier.padding(vertical = 8.dp))
+                Text("Support", style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(vertical = 8.dp))
+            }
+            item {
+                val ctx = LocalContext.current
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://buymeacoffee.com/")))
+                        },
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.tertiaryContainer
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("☕️", fontSize = MaterialTheme.typography.headlineMedium.fontSize)
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Buy Me a Coffee",
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.SemiBold)
+                            Text("Support development with a small donation",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Icon(Icons.Filled.ChevronRight, contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
             }
 
