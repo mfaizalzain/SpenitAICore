@@ -15,7 +15,8 @@ import java.time.Year
 data class TaxCategorySummary(
     val category: String,
     val receipts: List<Receipt>,
-    val totalTaxAmount: Double
+    val totalTaxAmount: Double,
+    val totalExpense: Double
 )
 
 data class TaxReliefUiState(
@@ -24,6 +25,7 @@ data class TaxReliefUiState(
     val receipts: List<Receipt> = emptyList(),
     val categories: List<TaxCategorySummary> = emptyList(),
     val totalRelief: Double = 0.0,
+    val totalExpense: Double = 0.0,
     val currency: String = "$",
     val isLoading: Boolean = true,
     val isExporting: Boolean = false,
@@ -107,14 +109,17 @@ class TaxReliefViewModel : ViewModel() {
                 TaxCategorySummary(
                     category = cat,
                     receipts = list,
-                    totalTaxAmount = list.sumOf { it.taxAmount }
+                    totalTaxAmount = list.sumOf { it.taxAmount },
+                    totalExpense = list.sumOf { it.total }
                 )
-            }.sortedByDescending { it.totalTaxAmount }
-            val total = categories.sumOf { it.totalTaxAmount }
+            }.sortedByDescending { it.totalExpense }
+            val totalTax = categories.sumOf { it.totalTaxAmount }
+            val totalExp = categories.sumOf { it.totalExpense }
             _state.value = _state.value.copy(
                 receipts = receipts,
                 categories = categories,
-                totalRelief = total,
+                totalRelief = totalTax,
+                totalExpense = totalExp,
                 currency = receipts.firstOrNull()?.currency ?: "$",
                 isLoading = false
             )

@@ -90,6 +90,7 @@ fun TaxReliefScreen(
                 selectedYear = state.selectedYear,
                 availableYears = state.availableYears,
                 totalRelief = state.totalRelief,
+                totalExpense = state.totalExpense,
                 receiptCount = state.receipts.size,
                 categoryCount = state.categories.size,
                 currency = state.currency,
@@ -186,6 +187,7 @@ private fun TaxReliefHeader(
     selectedYear: String,
     availableYears: List<String>,
     totalRelief: Double,
+    totalExpense: Double,
     receiptCount: Int,
     categoryCount: Int,
     currency: String,
@@ -251,14 +253,22 @@ private fun TaxReliefHeader(
 
             Spacer(Modifier.height(16.dp))
 
-            Text("Total tax relief", style = MaterialTheme.typography.labelLarge)
+            Text("Total expenses", style = MaterialTheme.typography.labelLarge)
             Spacer(Modifier.height(2.dp))
             Text(
-                CurrencyFormatter.format(totalRelief, currency),
+                CurrencyFormatter.format(totalExpense, currency),
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onPrimaryContainer
             )
+            if (totalRelief > 0.0) {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "Tax relief: ${CurrencyFormatter.format(totalRelief, currency)}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.72f)
+                )
+            }
             Spacer(Modifier.height(8.dp))
             Text(
                 "$receiptCount expense${if (receiptCount == 1) "" else "s"} across $categoryCount categor${if (categoryCount == 1) "y" else "ies"}",
@@ -294,7 +304,7 @@ private fun CategorySummaryRow(
                     )
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        CurrencyFormatter.formatCompact(category.totalTaxAmount, currency),
+                        CurrencyFormatter.formatCompact(category.totalExpense, currency),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary
@@ -360,16 +370,18 @@ private fun TaxReceiptCard(
             }
             Column(horizontalAlignment = Alignment.End) {
                 Text(
-                    CurrencyFormatter.format(receipt.taxAmount, receipt.currency),
+                    CurrencyFormatter.format(receipt.total, receipt.currency),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.primary
                 )
-                Text(
-                    "Spent ${CurrencyFormatter.format(receipt.total, receipt.currency)}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                if (receipt.taxAmount > 0.0) {
+                    Text(
+                        "Tax relief: ${CurrencyFormatter.format(receipt.taxAmount, receipt.currency)}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
         }
     }

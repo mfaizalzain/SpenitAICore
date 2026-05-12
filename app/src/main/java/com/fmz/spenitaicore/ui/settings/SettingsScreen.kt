@@ -481,6 +481,13 @@ fun SettingsScreen(
                                 Spacer(Modifier.width(4.dp))
                                 Text("Add API Key")
                             }
+
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                "Note: Built-in on-device AI (AICore) may not be as accurate as using an external API key.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
                 }

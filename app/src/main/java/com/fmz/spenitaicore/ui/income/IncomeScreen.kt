@@ -1,5 +1,7 @@
 package com.fmz.spenitaicore.ui.income
 
+import android.content.Intent
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -11,6 +13,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -23,6 +26,7 @@ import com.fmz.spenitaicore.ui.components.BottomSheetDialog
 import com.fmz.spenitaicore.ui.components.FullBottomSheet
 import com.fmz.spenitaicore.ui.components.SharedImportsBadgeIcon
 import com.fmz.spenitaicore.viewmodel.IncomeViewModel
+import androidx.core.content.FileProvider
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -335,13 +339,29 @@ fun IncomeScreen(
     ) {
         Column {
             // Show original document image if available
+            val context = LocalContext.current
             val imageFile = selectedEntry?.imagePath
                 ?.takeIf { it.isNotEmpty() }
                 ?.let { java.io.File(it) }
             if (imageFile != null && imageFile.exists()) {
                 if (selectedEntry?.isPdf == true) {
                     Card(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                val uri = FileProvider.getUriForFile(
+                                    context,
+                                    "${context.packageName}.fileprovider",
+                                    imageFile
+                                )
+                                context.startActivity(
+                                    Intent(Intent.ACTION_VIEW).apply {
+                                        setDataAndType(uri, "application/pdf")
+                                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    }
+                                )
+                            },
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.surfaceVariant
                         )
@@ -365,7 +385,24 @@ fun IncomeScreen(
                         }
                     }
                 } else {
-                    Card(modifier = Modifier.fillMaxWidth()) {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                val uri = FileProvider.getUriForFile(
+                                    context,
+                                    "${context.packageName}.fileprovider",
+                                    imageFile
+                                )
+                                context.startActivity(
+                                    Intent(Intent.ACTION_VIEW).apply {
+                                        setDataAndType(uri, "image/*")
+                                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    }
+                                )
+                            }
+                    ) {
                         coil.compose.AsyncImage(
                             model = imageFile,
                             contentDescription = "Income document",
