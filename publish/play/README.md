@@ -47,8 +47,11 @@ set +a
 ## Before Submitting For Review
 
 - Add a live privacy policy URL in Play Console.
+- Add the developer website URL in Play Console under Store presence > Store settings > Store listing contact details.
+- Publish `publish/play/app-ads.txt` at the root of the developer website so it is reachable as `https://spenit.my/app-ads.txt`.
+- In AdMob, open Apps > View all apps > app-ads.txt, expand SpenIt AICore, and click Check for updates after the file is live.
 - Complete Data Safety based on actual collection, sharing, encryption, and deletion behavior.
 - Complete App content declarations, including financial features, permissions, and target audience.
 - Add testers to the Internal testing or Closed testing track.
 
-Ads are disabled for this beta build because no real AdMob app ID/ad unit is configured.
+The app-ads.txt seller line for the configured AdMob publisher ID is prepared in `publish/play/app-ads.txt`.

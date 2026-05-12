@@ -65,7 +65,6 @@
     <string name="google_client_id">
         798538506657-onvnqo4m2f9an05iciaajihes2p2r6m7.apps.googleusercontent.com
     </string>
-    <!-- TODO: Replace with your real AdMob App ID from the AdMob console before release -->
-    <string name="admob_app_id">ca-app-pub-3940256099942544~3347511713</string>
+    <string name="admob_app_id">ca-app-pub-1016705366714872~9768287803</string>
     <string name="admob_banner_ad_unit_id">ca-app-pub-1016705366714872/8483510731</string>
 </resources>
