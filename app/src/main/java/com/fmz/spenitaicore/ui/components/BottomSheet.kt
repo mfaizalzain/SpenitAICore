@@ -1,6 +1,8 @@
 package com.fmz.spenitaicore.ui.components
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -97,7 +99,7 @@ fun FullBottomSheet(
                             style = MaterialTheme.typography.titleLarge
                         )
                         IconButton(onClick = onDismiss) {
-                            Text("X")
+                            Icon(Icons.Filled.Close, contentDescription = "Close")
                         }
                     }
                     Spacer(modifier = Modifier.height(12.dp))
