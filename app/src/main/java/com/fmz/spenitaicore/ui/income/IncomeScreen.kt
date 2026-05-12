@@ -301,6 +301,16 @@ fun IncomeScreen(
                         }
                     }
                 )
+                // Transparent overlay to catch taps on the text field area
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .padding(end = 48.dp)
+                        .clickable(
+                            indication = null,
+                            interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+                        ) { categoryDropdown = true }
+                )
                 DropdownMenu(expanded = categoryDropdown, onDismissRequest = { categoryDropdown = false }) {
                     IncomeSources.All.forEach { category ->
                         DropdownMenuItem(

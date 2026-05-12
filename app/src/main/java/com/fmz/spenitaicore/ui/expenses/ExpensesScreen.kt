@@ -326,6 +326,16 @@ fun ExpensesScreen(
                         }
                     }
                 )
+                // Transparent overlay to catch taps on the text field area
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .padding(end = 48.dp)
+                        .clickable(
+                            indication = null,
+                            interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+                        ) { catDropdown = true }
+                )
                 DropdownMenu(expanded = catDropdown, onDismissRequest = { catDropdown = false }) {
                     ExpensesViewModel.SPENDING_CATEGORIES.forEach { cat ->
                         DropdownMenuItem(
