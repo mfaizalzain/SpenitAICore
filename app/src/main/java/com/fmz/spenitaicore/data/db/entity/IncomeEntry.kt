@@ -21,7 +21,16 @@ data class IncomeEntry(
     @ColumnInfo(name = "updated_at") val updatedAt: Long = System.currentTimeMillis()
 ) {
     val categoryEmoji: String
-        get() = when (category) {
+        get() = categoryEmoji(category)
+
+    val isPdf: Boolean
+        get() = imagePath?.endsWith(".pdf", ignoreCase = true) == true
+
+    val isImage: Boolean
+        get() = !imagePath.isNullOrEmpty() && !isPdf
+
+    companion object {
+        fun categoryEmoji(category: String): String = when (category) {
             "Salary" -> "\uD83D\uDCBC"
             "Freelance" -> "\uD83D\uDCBB"
             "Business" -> "\uD83C\uDFE2"
@@ -33,12 +42,7 @@ data class IncomeEntry(
             "Commision" -> "\uD83E\uDD1D"
             else -> "\uD83D\uDCB0"
         }
-
-    val isPdf: Boolean
-        get() = imagePath?.endsWith(".pdf", ignoreCase = true) == true
-
-    val isImage: Boolean
-        get() = !imagePath.isNullOrEmpty() && !isPdf
+    }
 }
 
 object IncomeSources {

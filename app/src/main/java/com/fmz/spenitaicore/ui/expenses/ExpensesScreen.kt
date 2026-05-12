@@ -179,7 +179,12 @@ fun ExpensesScreen(
                     FilterChip(
                         selected = selectedCategory != "All",
                         onClick = { showCategoryDropdown = true },
-                        label = { Text(selectedCategory) },
+                        label = {
+                            val labelText = if (selectedCategory != "All")
+                                "${com.fmz.spenitaicore.data.db.entity.Receipt.getCategoryIcon(selectedCategory)} $selectedCategory"
+                            else selectedCategory
+                            Text(labelText)
+                        },
                         trailingIcon = { Icon(Icons.Filled.ArrowDropDown, null, Modifier.size(18.dp)) }
                     )
                     DropdownMenu(
@@ -195,7 +200,7 @@ fun ExpensesScreen(
                         )
                         ExpensesViewModel.SPENDING_CATEGORIES.forEach { cat ->
                             DropdownMenuItem(
-                                text = { Text(cat) },
+                                text = { Text("${com.fmz.spenitaicore.data.db.entity.Receipt.getCategoryIcon(cat)} $cat") },
                                 onClick = {
                                     viewModel.setCategory(cat)
                                     showCategoryDropdown = false
@@ -324,7 +329,7 @@ fun ExpensesScreen(
                 DropdownMenu(expanded = catDropdown, onDismissRequest = { catDropdown = false }) {
                     ExpensesViewModel.SPENDING_CATEGORIES.forEach { cat ->
                         DropdownMenuItem(
-                            text = { Text(cat) },
+                            text = { Text("${com.fmz.spenitaicore.data.db.entity.Receipt.getCategoryIcon(cat)} $cat") },
                             onClick = {
                                 currentCategory = cat
                                 catDropdown = false
@@ -362,6 +367,16 @@ fun ExpensesScreen(
                                 Icon(Icons.Filled.ArrowDropDown, null)
                             }
                         }
+                    )
+                    // Transparent overlay to catch taps on the text field
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .padding(end = 48.dp)
+                            .clickable(
+                                indication = null,
+                                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+                            ) { taxCatDropdown = true }
                     )
                     DropdownMenu(
                         expanded = taxCatDropdown,
@@ -492,7 +507,7 @@ fun ExpensesScreen(
                     }
                     Column {
                         Text("Category", style = MaterialTheme.typography.labelSmall)
-                        Text(receipt.category, style = MaterialTheme.typography.bodyMedium)
+                        Text(receipt.categoryIcon + " " + receipt.category, style = MaterialTheme.typography.bodyMedium)
                     }
                 Column {
                     Text("Date", style = MaterialTheme.typography.labelSmall)

@@ -74,13 +74,6 @@ fun SettingsScreen(
     var showAiProviderDropdown by remember { mutableStateOf(false) }
     var showAiModelDropdown by remember { mutableStateOf(false) }
 
-    // ── Tax Export state ─────────────────────────────────────────
-    val availableTaxYears by viewModel.availableTaxYears.collectAsStateWithLifecycle()
-    val selectedTaxYear by viewModel.selectedTaxYear.collectAsStateWithLifecycle()
-    val isExporting by viewModel.isExporting.collectAsStateWithLifecycle()
-    val exportResult by viewModel.exportResult.collectAsStateWithLifecycle()
-    val exportError by viewModel.exportError.collectAsStateWithLifecycle()
-
     // ── Backup state ────────────────────────────────────────────
     val isBackupEnabled by viewModel.isBackupEnabled.collectAsStateWithLifecycle()
     val isBackingUp by viewModel.isBackingUp.collectAsStateWithLifecycle()
@@ -97,7 +90,6 @@ fun SettingsScreen(
     val restoreError by viewModel.restoreError.collectAsStateWithLifecycle()
     val selectedBackupForRestore by viewModel.selectedBackupForRestore.collectAsStateWithLifecycle()
 
-    var showTaxYearDropdown by remember { mutableStateOf(false) }
     var showCurrencyDropdown by remember { mutableStateOf(false) }
     var showThemeDropdown by remember { mutableStateOf(false) }
     var showPayDayDropdown by remember { mutableStateOf(false) }
@@ -114,30 +106,6 @@ fun SettingsScreen(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         // Re-composition via LiveData/State handles updates
-    }
-
-    // Trigger share when export completes
-    LaunchedEffect(exportResult) {
-        exportResult?.let { result ->
-            try {
-                val zipFile = java.io.File(result.zipPath)
-                val uri = FileProvider.getUriForFile(
-                    context,
-                    "${context.packageName}.fileprovider",
-                    zipFile
-                )
-                val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                    type = "application/zip"
-                    putExtra(Intent.EXTRA_STREAM, uri)
-                    putExtra(Intent.EXTRA_SUBJECT, "Tax Relief Export ${selectedTaxYear}")
-                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                }
-                context.startActivity(Intent.createChooser(shareIntent, "Share Tax Export"))
-            } catch (e: Exception) {
-                Toast.makeText(context, "Failed to share: ${e.message}", Toast.LENGTH_SHORT).show()
-            }
-            viewModel.clearExportResult()
-        }
     }
 
     // Drive consent launcher
@@ -488,87 +456,6 @@ fun SettingsScreen(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                        }
-                    }
-                }
-            }
-
-            // Tax Export section
-            if (availableTaxYears.isNotEmpty()) {
-                item {
-                    Divider(modifier = Modifier.padding(vertical = 8.dp))
-                    Text("Tax Export", style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(vertical = 8.dp))
-                }
-
-                // Export error
-                if (exportError != null) {
-                    item {
-                        Card(
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.errorContainer
-                            ),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(
-                                text = exportError!!,
-                                modifier = Modifier.padding(16.dp),
-                                color = MaterialTheme.colorScheme.onErrorContainer,
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(4.dp))
-                    }
-                }
-
-                // Year selector
-                item {
-                    Box {
-                        SettingsItem(
-                            title = "Tax Year",
-                            subtitle = selectedTaxYear,
-                            icon = Icons.Outlined.CalendarMonth,
-                            onClick = { showTaxYearDropdown = true }
-                        )
-                        DropdownMenu(
-                            expanded = showTaxYearDropdown,
-                            onDismissRequest = { showTaxYearDropdown = false }
-                        ) {
-                            availableTaxYears.forEach { year ->
-                                DropdownMenuItem(
-                                    text = { Text(year) },
-                                    onClick = {
-                                        viewModel.setTaxYear(year)
-                                        showTaxYearDropdown = false
-                                    }
-                                )
-                            }
-                        }
-                    }
-                }
-
-                // Export button
-                item {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Button(
-                        onClick = { viewModel.exportTaxRelief() },
-                        enabled = !isExporting && selectedTaxYear.isNotEmpty(),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        if (isExporting) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                strokeWidth = 2.dp,
-                                color = MaterialTheme.colorScheme.onPrimary
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Text("Exporting...")
-                        } else {
-                            Icon(Icons.Outlined.FileDownload, contentDescription = null)
-                            Spacer(Modifier.width(8.dp))
-                            Text("Export Tax Relief for $selectedTaxYear")
                         }
                     }
                 }

@@ -137,9 +137,7 @@ class ExpensesViewModel : ViewModel() {
 
     fun onSearchQueryChanged(query: String) {
         _searchQuery.value = query
-        if (query.isBlank()) {
-            applyFilters()
-        }
+        applyFilters()
     }
 
     fun applySearchFilters() {

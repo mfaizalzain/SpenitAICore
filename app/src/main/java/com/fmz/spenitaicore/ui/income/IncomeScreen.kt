@@ -193,7 +193,12 @@ fun IncomeScreen(
                     FilterChip(
                         selected = selectedCategory != "All",
                         onClick = { showCategoryDropdown = true },
-                        label = { Text(selectedCategory) },
+                        label = {
+                            val labelText = if (selectedCategory != "All")
+                                "${com.fmz.spenitaicore.data.db.entity.IncomeEntry.categoryEmoji(selectedCategory)} $selectedCategory"
+                            else selectedCategory
+                            Text(labelText)
+                        },
                         trailingIcon = { Icon(Icons.Filled.ArrowDropDown, null, Modifier.size(18.dp)) }
                     )
                     DropdownMenu(
@@ -209,7 +214,7 @@ fun IncomeScreen(
                         )
                         IncomeViewModel.INCOME_CATEGORIES.forEach { cat ->
                             DropdownMenuItem(
-                                text = { Text(cat) },
+                                text = { Text("${com.fmz.spenitaicore.data.db.entity.IncomeEntry.categoryEmoji(cat)} $cat") },
                                 onClick = {
                                     viewModel.setCategory(cat)
                                     showCategoryDropdown = false

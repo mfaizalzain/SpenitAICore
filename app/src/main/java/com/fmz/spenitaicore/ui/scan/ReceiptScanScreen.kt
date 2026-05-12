@@ -9,6 +9,7 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -30,6 +31,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.fmz.spenitaicore.data.db.entity.ReceiptItem
 import com.fmz.spenitaicore.ui.components.CompactTopAppBar
 import com.fmz.spenitaicore.ui.components.DatePickerField
+import com.fmz.spenitaicore.viewmodel.ExpensesViewModel
 import com.fmz.spenitaicore.viewmodel.ReceiptScanViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -102,10 +104,18 @@ fun ReceiptScanScreen(
         }
     }
 
-    val imagePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
+    val documentPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
     ) { uri ->
-        uri?.let { viewModel.setImageUri(it) }
+        uri?.let {
+            try {
+                context.contentResolver.takePersistableUriPermission(
+                    it,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            } catch (_: Exception) { }
+            viewModel.setImageUri(it)
+        }
     }
 
     Scaffold(
@@ -162,7 +172,7 @@ fun ReceiptScanScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    OutlinedButton(
+                    FilledTonalButton(
                         onClick = { launchCamera() },
                         modifier = Modifier.weight(1f)
                     ) {
@@ -170,13 +180,13 @@ fun ReceiptScanScreen(
                         Spacer(Modifier.width(4.dp))
                         Text("Retake")
                     }
-                    OutlinedButton(
-                        onClick = { imagePickerLauncher.launch("image/*") },
+                    FilledTonalButton(
+                        onClick = { documentPickerLauncher.launch(arrayOf("image/*", "application/pdf")) },
                         modifier = Modifier.weight(1f)
                     ) {
                         Icon(Icons.Filled.PhotoLibrary, contentDescription = null)
                         Spacer(Modifier.width(4.dp))
-                        Text("Gallery")
+                        Text("Files")
                     }
                 }
             } else {
@@ -199,19 +209,19 @@ fun ReceiptScanScreen(
                             style = MaterialTheme.typography.titleMedium)
                         Spacer(modifier = Modifier.height(16.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            FilledTonalButton(
+                            Button(
                                 onClick = { launchCamera() }
                             ) {
                                 Icon(Icons.Filled.CameraAlt, contentDescription = null)
                                 Spacer(Modifier.width(4.dp))
                                 Text("Camera")
                             }
-                            FilledTonalButton(
-                                onClick = { imagePickerLauncher.launch("image/*") }
+                            Button(
+                                onClick = { documentPickerLauncher.launch(arrayOf("image/*", "application/pdf")) }
                             ) {
                                 Icon(Icons.Filled.PhotoLibrary, contentDescription = null)
                                 Spacer(Modifier.width(4.dp))
-                                Text("Gallery")
+                                Text("Files")
                             }
                         }
                     }
@@ -291,7 +301,7 @@ fun ReceiptScanScreen(
             // Category dropdown
             Box {
                 OutlinedTextField(
-                    value = category,
+                    value = if (category.isEmpty()) "" else "${com.fmz.spenitaicore.data.db.entity.Receipt.getCategoryIcon(category)} $category",
                     onValueChange = {},
                     label = { Text("Category") },
                     modifier = Modifier.fillMaxWidth(),
@@ -302,13 +312,26 @@ fun ReceiptScanScreen(
                         }
                     }
                 )
+                // Transparent overlay to catch taps on the text field area
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .padding(end = 48.dp)
+                        .clickable(
+                            indication = null,
+                            interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+                        ) { showCategoryDropdown = true }
+                )
                 DropdownMenu(
                     expanded = showCategoryDropdown,
                     onDismissRequest = { showCategoryDropdown = false }
                 ) {
-                    com.fmz.spenitaicore.viewmodel.ExpensesViewModel.SPENDING_CATEGORIES.forEach { cat ->
+                    ExpensesViewModel.SPENDING_CATEGORIES.forEach { cat: String ->
                         DropdownMenuItem(
-                            text = { Text(cat) },
+                            text = {
+                                val ic = com.fmz.spenitaicore.data.db.entity.Receipt.getCategoryIcon(cat)
+                                Text("$ic $cat")
+                            },
                             onClick = {
                                 viewModel.setCategory(cat)
                                 showCategoryDropdown = false
@@ -344,6 +367,16 @@ fun ReceiptScanScreen(
                                 Icon(Icons.Filled.ArrowDropDown, null)
                             }
                         }
+                    )
+                    // Transparent overlay to catch taps on the text field area
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .padding(end = 48.dp)
+                            .clickable(
+                                indication = null,
+                                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+                            ) { showTaxCategoryDropdown = true }
                     )
                     DropdownMenu(
                         expanded = showTaxCategoryDropdown,

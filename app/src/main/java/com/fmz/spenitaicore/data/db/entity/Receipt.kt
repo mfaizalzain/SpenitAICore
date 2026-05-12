@@ -24,11 +24,15 @@ data class Receipt(
     @ColumnInfo(name = "tags_json") val tagsJson: String = "[]"
 ) {
     val categoryIcon: String
-        get() = when (category) {
+        get() = getCategoryIcon(category)
+
+    companion object {
+        fun getCategoryIcon(category: String): String = when (category) {
             "Food & Drinks", "Food & Dining" -> "\uD83C\uDF7D\uFE0F"
             "Groceries" -> "\uD83D\uDECD\uFE0F"
             "Transport" -> "\uD83D\uDE97"
             "Shopping" -> "\uD83D\uDED2"
+            "Gadget" -> "\uD83D\uDCF1"
             "Entertainment" -> "\uD83C\uDFAC"
             "Health & Medical" -> "\uD83E\uDE7A"
             "Utilities" -> "\uD83D\uDCA1"
@@ -39,8 +43,18 @@ data class Receipt(
             "Personal Care" -> "\uD83E\uDDF4"
             "Subscriptions" -> "\uD83D\uDD01"
             "Insurance" -> "\uD83D\uDEE1\uFE0F"
+            "Investment" -> "\uD83D\uDCC8"
+            "Services" -> "\uD83D\uDEE0\uFE0F"
+            "Fuel/EV Charging" -> "\u26FD"
+            "Credit Card" -> "\uD83D\uDCB3"
+            "Rental" -> "\uD83C\uDFE2"
+            "Toll" -> "\uD83D\uDEE3\uFE0F"
+            "Parking" -> "\uD83D\uDD7F\uFE0F"
+            "Loan" -> "\uD83C\uDFE6"
+            "Mortgage" -> "\uD83C\uDFD8\uFE0F"
             else -> "\uD83E\uDDFE"
         }
+    }
 
     val isPdf: Boolean
         get() = imagePath?.endsWith(".pdf", ignoreCase = true) == true

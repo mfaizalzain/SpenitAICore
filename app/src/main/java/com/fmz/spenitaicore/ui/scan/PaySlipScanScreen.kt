@@ -9,6 +9,7 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -161,7 +162,7 @@ fun PaySlipScanScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    OutlinedButton(
+                    FilledTonalButton(
                         onClick = { launchCamera() },
                         modifier = Modifier.weight(1f)
                     ) {
@@ -169,7 +170,7 @@ fun PaySlipScanScreen(
                         Spacer(Modifier.width(4.dp))
                         Text("Retake")
                     }
-                    OutlinedButton(
+                    FilledTonalButton(
                         onClick = { documentPickerLauncher.launch(arrayOf("image/*", "application/pdf")) },
                         modifier = Modifier.weight(1f)
                     ) {
@@ -198,14 +199,14 @@ fun PaySlipScanScreen(
                             style = MaterialTheme.typography.titleMedium)
                         Spacer(modifier = Modifier.height(16.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            FilledTonalButton(
+                            Button(
                                 onClick = { launchCamera() }
                             ) {
                                 Icon(Icons.Filled.CameraAlt, null)
                                 Spacer(Modifier.width(4.dp))
                                 Text("Camera")
                             }
-                            FilledTonalButton(
+                            Button(
                                 onClick = { documentPickerLauncher.launch(arrayOf("image/*", "application/pdf")) }
                             ) {
                                 Icon(Icons.Filled.PhotoLibrary, null)
@@ -265,6 +266,16 @@ fun PaySlipScanScreen(
                         }
                     }
                 )
+                    // Transparent overlay to catch taps on the text field
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .padding(end = 48.dp)
+                            .clickable(
+                                indication = null,
+                                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+                            ) { showCategoryDropdown = true }
+                    )
                 DropdownMenu(
                     expanded = showCategoryDropdown,
                     onDismissRequest = { showCategoryDropdown = false }
