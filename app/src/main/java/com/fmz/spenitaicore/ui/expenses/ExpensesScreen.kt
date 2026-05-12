@@ -33,6 +33,7 @@ fun ExpensesScreen(
     viewModel: ExpensesViewModel,
     onNavigateToScan: () -> Unit,
     onNavigateToSharedImports: () -> Unit,
+    onNavigateToSettings: () -> Unit,
     sharedImportCount: Int = 0
 ) {
     val filteredReceipts by viewModel.filteredReceipts.collectAsStateWithLifecycle()
@@ -77,8 +78,8 @@ fun ExpensesScreen(
                             contentDescription = "Imports"
                         )
                     }
-                    IconButton(onClick = onNavigateToScan) {
-                        Icon(Icons.Filled.Add, contentDescription = "Add")
+                    IconButton(onClick = onNavigateToSettings) {
+                        Icon(Icons.Outlined.Settings, contentDescription = "Settings")
                     }
                 }
             )

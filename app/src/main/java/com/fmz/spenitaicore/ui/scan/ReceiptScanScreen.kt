@@ -126,15 +126,6 @@ fun ReceiptScanScreen(
                             Text("Convert")
                         }
                     }
-                    Button(
-                        onClick = {
-                            viewModel.saveReceipt()
-                            onNavigateBack()
-                        },
-                        enabled = !isBusy && merchant.isNotBlank()
-                    ) {
-                        Text("Save")
-                    }
                 }
             )
         }
@@ -426,6 +417,17 @@ fun ReceiptScanScreen(
                         }
                     }
                 }
+            }
+
+            Button(
+                onClick = {
+                    viewModel.saveReceipt()
+                    onNavigateBack()
+                },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !isBusy && merchant.isNotBlank()
+            ) {
+                Text("Save Expense")
             }
 
             Spacer(modifier = Modifier.height(16.dp))

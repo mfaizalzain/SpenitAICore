@@ -9,7 +9,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.Image
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Fingerprint
-import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -228,22 +227,6 @@ fun LoginScreen(
                     )
 
                     Spacer(modifier = Modifier.height(12.dp))
-
-                    // Passkey
-                    SignInButton(
-                        onClick = { viewModel.signInWithPasskey() },
-                        enabled = !state.isLoading,
-                        isLoading = false,
-                        label = "Continue with Passkey",
-                        leading = {
-                            Icon(
-                                imageVector = Icons.Outlined.Key,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                    )
 
                     // Biometric
                     if (canUseBiometrics) {

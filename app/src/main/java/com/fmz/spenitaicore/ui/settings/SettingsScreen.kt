@@ -170,6 +170,12 @@ fun SettingsScreen(
         viewModel.loadSettings()
     }
 
+    val appVersion = remember {
+        try {
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "?"
+        } catch (_: Exception) { "?" }
+    }
+
     Scaffold(
         topBar = {
             CompactTopAppBar(title = { Text("Settings") })
@@ -780,7 +786,7 @@ fun SettingsScreen(
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text("SpenIt AICore", fontWeight = FontWeight.Bold,
                             style = MaterialTheme.typography.titleMedium)
-                        Text("Version 1.0.0", style = MaterialTheme.typography.bodySmall,
+                        Text("Version $appVersion", style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Spacer(modifier = Modifier.height(8.dp))
                         Text("Track your expenses and income with on-device AI.",

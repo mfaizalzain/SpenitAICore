@@ -126,15 +126,6 @@ fun PaySlipScanScreen(
                             Text("Convert to Expense")
                         }
                     }
-                    Button(
-                        onClick = {
-                            viewModel.saveReceipt()
-                            onNavigateBack()
-                        },
-                        enabled = !isBusy && total > 0 && merchant.isNotBlank()
-                    ) {
-                        Text("Save")
-                    }
                 }
             )
         }
@@ -337,6 +328,17 @@ fun PaySlipScanScreen(
                 modifier = Modifier.fillMaxWidth(),
                 minLines = 2
             )
+
+            Button(
+                onClick = {
+                    viewModel.saveReceipt()
+                    onNavigateBack()
+                },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !isBusy && total > 0 && merchant.isNotBlank()
+            ) {
+                Text("Save Income")
+            }
 
             Spacer(modifier = Modifier.height(32.dp))
         }

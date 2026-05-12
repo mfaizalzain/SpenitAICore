@@ -30,6 +30,7 @@ fun IncomeScreen(
     viewModel: IncomeViewModel,
     onNavigateToScan: () -> Unit,
     onNavigateToSharedImports: () -> Unit,
+    onNavigateToSettings: () -> Unit,
     sharedImportCount: Int = 0
 ) {
     val incomeEntries by viewModel.incomeEntries.collectAsStateWithLifecycle()
@@ -67,8 +68,8 @@ fun IncomeScreen(
                             contentDescription = "Imports"
                         )
                     }
-                    IconButton(onClick = onNavigateToScan) {
-                        Icon(Icons.Filled.Add, contentDescription = "Add")
+                    IconButton(onClick = onNavigateToSettings) {
+                        Icon(Icons.Outlined.Settings, contentDescription = "Settings")
                     }
                 }
             )

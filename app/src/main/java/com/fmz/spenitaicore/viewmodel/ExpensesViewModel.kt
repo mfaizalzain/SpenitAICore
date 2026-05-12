@@ -242,6 +242,23 @@ class ExpensesViewModel : ViewModel() {
     private fun applyFilters() {
         var filtered = allReceipts.asSequence()
 
+        // Apply period filter based on the receipt's date field
+        val today = DateUtils.todayLocalDate()
+        val fromDate = when (_selectedPeriod.value) {
+            "Last90" -> today.minusDays(90)
+            "ThisYear" -> java.time.LocalDate.of(today.year, 1, 1)
+            "All" -> null
+            else -> today.minusDays(30) // Last30
+        }
+        if (fromDate != null) {
+            filtered = filtered.filter { r ->
+                try {
+                    val d = DateUtils.toLocalDate(r.date)
+                    !d.isBefore(fromDate)
+                } catch (_: Exception) { true }
+            }
+        }
+
         val q = _searchQuery.value.trim().lowercase()
         if (q.isNotEmpty()) {
             filtered = filtered.filter { r ->

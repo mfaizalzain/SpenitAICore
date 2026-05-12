@@ -26,6 +26,7 @@ import com.fmz.spenitaicore.ui.settings.SettingsScreen
 import com.fmz.spenitaicore.ui.scan.ReceiptScanScreen
 import com.fmz.spenitaicore.ui.scan.PaySlipScanScreen
 import com.fmz.spenitaicore.ui.sharedimports.SharedImportsScreen
+import com.fmz.spenitaicore.ui.taxrelief.TaxReliefScreen
 import com.fmz.spenitaicore.viewmodel.*
 import kotlinx.coroutines.flow.Flow
 
@@ -34,6 +35,7 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector,
     data object Expenses : Screen("expenses", "Expenses", Icons.Outlined.Receipt, Icons.Filled.Receipt)
     data object Income : Screen("income", "Income", Icons.Outlined.Payments, Icons.Filled.Payments)
     data object Insights : Screen("insights", "Insights", Icons.Outlined.Insights, Icons.Filled.Insights)
+    data object TaxRelief : Screen("tax_relief", "Tax Relief", Icons.Outlined.AccountBalance, Icons.Filled.AccountBalance)
     data object Settings : Screen("settings", "Settings", Icons.Outlined.Settings, Icons.Filled.Settings)
 }
 
@@ -42,7 +44,7 @@ val bottomNavItems = listOf(
     Screen.Expenses,
     Screen.Income,
     Screen.Insights,
-    Screen.Settings
+    Screen.TaxRelief
 )
 
 @Composable
@@ -165,6 +167,7 @@ fun SpenItNavHost(
                     viewModel = expensesViewModel,
                     onNavigateToScan = { navController.navigate("receipt_scan") },
                     onNavigateToSharedImports = { navController.navigate("shared_imports") },
+                    onNavigateToSettings = { navController.navigate(Screen.Settings.route) },
                     sharedImportCount = sharedImportCount
                 )
             }
@@ -174,12 +177,24 @@ fun SpenItNavHost(
                     viewModel = incomeViewModel,
                     onNavigateToScan = { navController.navigate("payslip_scan") },
                     onNavigateToSharedImports = { navController.navigate("shared_imports") },
+                    onNavigateToSettings = { navController.navigate(Screen.Settings.route) },
                     sharedImportCount = sharedImportCount
                 )
             }
 
             composable(Screen.Insights.route) {
                 InsightsScreen(viewModel = insightsViewModel)
+            }
+
+            composable(Screen.TaxRelief.route) {
+                val taxReliefViewModel = remember { TaxReliefViewModel() }
+                TaxReliefScreen(
+                    viewModel = taxReliefViewModel,
+                    onNavigateToSettings = { navController.navigate(Screen.Settings.route) },
+                    onNavigateToEditReceipt = { receiptId ->
+                        navController.navigate("receipt_scan?receiptId=$receiptId")
+                    }
+                )
             }
 
             composable(Screen.Settings.route) {
