@@ -1,0 +1,11 @@
+What's new in 1.0.9:
+
+- Light theme overhaul with refreshed colours
+- AI provider settings (Gemini, OpenAI, Custom) with offline fallback
+- Universal bank statement import for any Malaysian bank
+- Convert expenses to income and vice versa
+- Account deletion option in Settings
+- Search and filter on income page
+- Shared imports cleanup and share improvements
+- Backup and restore reliability fixes
+- Bug fixes and performance improvements

@@ -7,6 +7,7 @@ import com.fmz.spenitaicore.ai.AiInsightResult
 import com.fmz.spenitaicore.ai.SpendingInsights
 import com.fmz.spenitaicore.data.db.entity.Receipt
 import com.fmz.spenitaicore.data.db.entity.ReceiptItem
+import com.fmz.spenitaicore.data.db.entity.IncomeEntry
 import com.fmz.spenitaicore.util.CurrencyFormatter
 import com.fmz.spenitaicore.util.DateUtils
 import com.fmz.spenitaicore.util.SalaryCycle
@@ -303,6 +304,28 @@ class DashboardViewModel : ViewModel() {
             receiptRepo.deleteReceipt(receipt)
             fetchData()
             _isBusy.value = false
+        }
+    }
+
+    fun convertToIncome(receipt: Receipt) {
+        viewModelScope.launch {
+            _isBusy.value = true
+            try {
+                receiptRepo.deleteReceipt(receipt)
+                val entry = IncomeEntry(
+                    source = receipt.merchant,
+                    amount = receipt.total,
+                    currency = receipt.currency,
+                    date = receipt.date,
+                    notes = receipt.notes,
+                    category = "Other Income"
+                )
+                incomeRepo.saveIncomeEntry(entry)
+                dismissDetail()
+                loadData()
+            } finally {
+                _isBusy.value = false
+            }
         }
     }
 

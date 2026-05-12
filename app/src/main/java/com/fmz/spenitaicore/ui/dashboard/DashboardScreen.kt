@@ -67,6 +67,7 @@ fun DashboardScreen(
     val isDetailVisible by viewModel.isDetailVisible.collectAsStateWithLifecycle()
     val isEditVisible by viewModel.isEditVisible.collectAsStateWithLifecycle()
     val editingReceipt by viewModel.editingReceipt.collectAsStateWithLifecycle()
+    val isBusy by viewModel.isBusy.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) {
         viewModel.quietLoad()
@@ -585,34 +586,54 @@ fun DashboardScreen(
             // Actions row
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.SpaceEvenly
             ) {
-                Button(
-                    onClick = {
-                        selectedReceipt?.let { viewModel.startEdit(it) }
-                    },
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Icon(Icons.Filled.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text("Edit")
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    IconButton(
+                        onClick = { selectedReceipt?.let { viewModel.startEdit(it) } }
+                    ) {
+                        Icon(
+                            Icons.Filled.Edit, contentDescription = "Edit",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    Text("Edit", style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary)
                 }
-                Button(
-                    onClick = {
-                        selectedReceipt?.let {
-                            viewModel.deleteReceipt(it)
-                            viewModel.dismissDetail()
+
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    IconButton(
+                        onClick = { selectedReceipt?.let { viewModel.convertToIncome(it) } },
+                        enabled = !isBusy
+                    ) {
+                        Icon(
+                            Icons.Filled.SwapHoriz, contentDescription = "Convert to Income",
+                            tint = MaterialTheme.colorScheme.secondary
+                        )
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    Text("Convert", style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.secondary)
+                }
+
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    IconButton(
+                        onClick = {
+                            selectedReceipt?.let {
+                                viewModel.deleteReceipt(it)
+                                viewModel.dismissDetail()
+                            }
                         }
-                    },
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer,
-                        contentColor = MaterialTheme.colorScheme.onErrorContainer
-                    )
-                ) {
-                    Icon(Icons.Filled.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text("Delete")
+                    ) {
+                        Icon(
+                            Icons.Filled.Delete, contentDescription = "Delete",
+                            tint = MaterialTheme.colorScheme.error
+                        )
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    Text("Delete", style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error)
                 }
             }
             Spacer(modifier = Modifier.height(24.dp))
