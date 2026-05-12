@@ -139,24 +139,65 @@ fun IncomeScreen(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 // Period filter
-                FilterChip(
-                    selected = true,
-                    onClick = { showPeriodDropdown = true },
-                    label = {
-                        val periods = listOf("Last30" to "Last 30 Days", "Last90" to "Last 90 Days",
+                Box {
+                    FilterChip(
+                        selected = true,
+                        onClick = { showPeriodDropdown = true },
+                        label = {
+                            val periods = listOf("Last30" to "Last 30 Days", "Last90" to "Last 90 Days",
+                                "ThisYear" to "This Year", "All" to "All Time")
+                            Text(periods.firstOrNull { it.first == selectedPeriod }?.second ?: selectedPeriod)
+                        },
+                        trailingIcon = { Icon(Icons.Filled.ArrowDropDown, null, Modifier.size(18.dp)) }
+                    )
+                    DropdownMenu(
+                        expanded = showPeriodDropdown,
+                        onDismissRequest = { showPeriodDropdown = false }
+                    ) {
+                        listOf("Last30" to "Last 30 Days", "Last90" to "Last 90 Days",
                             "ThisYear" to "This Year", "All" to "All Time")
-                        Text(periods.firstOrNull { it.first == selectedPeriod }?.second ?: selectedPeriod)
-                    },
-                    trailingIcon = { Icon(Icons.Filled.ArrowDropDown, null, Modifier.size(18.dp)) }
-                )
+                            .forEach { (value, label) ->
+                                DropdownMenuItem(
+                                    text = { Text(label) },
+                                    onClick = {
+                                        viewModel.setPeriod(value)
+                                        showPeriodDropdown = false
+                                    }
+                                )
+                            }
+                    }
+                }
 
                 // Category filter
-                FilterChip(
-                    selected = selectedCategory != "All",
-                    onClick = { showCategoryDropdown = true },
-                    label = { Text(selectedCategory) },
-                    trailingIcon = { Icon(Icons.Filled.ArrowDropDown, null, Modifier.size(18.dp)) }
-                )
+                Box {
+                    FilterChip(
+                        selected = selectedCategory != "All",
+                        onClick = { showCategoryDropdown = true },
+                        label = { Text(selectedCategory) },
+                        trailingIcon = { Icon(Icons.Filled.ArrowDropDown, null, Modifier.size(18.dp)) }
+                    )
+                    DropdownMenu(
+                        expanded = showCategoryDropdown,
+                        onDismissRequest = { showCategoryDropdown = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("All") },
+                            onClick = {
+                                viewModel.setCategory("All")
+                                showCategoryDropdown = false
+                            }
+                        )
+                        IncomeViewModel.INCOME_CATEGORIES.forEach { cat ->
+                            DropdownMenuItem(
+                                text = { Text(cat) },
+                                onClick = {
+                                    viewModel.setCategory(cat)
+                                    showCategoryDropdown = false
+                                }
+                            )
+                        }
+                    }
+                }
             }
 
             // Total header
@@ -192,47 +233,6 @@ fun IncomeScreen(
                     item { Spacer(modifier = Modifier.height(72.dp)) }
                 }
             }
-        }
-    }
-
-    // Period dropdown
-    DropdownMenu(
-        expanded = showPeriodDropdown,
-        onDismissRequest = { showPeriodDropdown = false }
-    ) {
-        listOf("Last30" to "Last 30 Days", "Last90" to "Last 90 Days",
-            "ThisYear" to "This Year", "All" to "All Time")
-            .forEach { (value, label) ->
-                DropdownMenuItem(
-                    text = { Text(label) },
-                    onClick = {
-                        viewModel.setPeriod(value)
-                        showPeriodDropdown = false
-                    }
-                )
-            }
-    }
-
-    // Category dropdown
-    DropdownMenu(
-        expanded = showCategoryDropdown,
-        onDismissRequest = { showCategoryDropdown = false }
-    ) {
-        DropdownMenuItem(
-            text = { Text("All") },
-            onClick = {
-                viewModel.setCategory("All")
-                showCategoryDropdown = false
-            }
-        )
-        IncomeViewModel.INCOME_CATEGORIES.forEach { cat ->
-            DropdownMenuItem(
-                text = { Text(cat) },
-                onClick = {
-                    viewModel.setCategory(cat)
-                    showCategoryDropdown = false
-                }
-            )
         }
     }
 
