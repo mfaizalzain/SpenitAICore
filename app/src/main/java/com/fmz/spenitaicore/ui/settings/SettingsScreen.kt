@@ -733,7 +733,7 @@ fun SettingsScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable {
-                            ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://buymeacoffee.com/")))
+                            ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://buymeacoffee.com/faizalmzain")))
                         },
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.tertiaryContainer
