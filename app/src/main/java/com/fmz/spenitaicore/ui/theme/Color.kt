@@ -19,7 +19,9 @@ val TealDark = Color(0xFF115F59)
 // ─── Tertiary: Rose (warm accent for convert, highlights) ─────────────────
 val RoseTertiary = Color(0xFFE11D48)
 val RoseContainer = Color(0xFFFFE4E6)
+val RoseOnContainer = Color(0xFF7F1D1D)
 val RoseLight = Color(0xFFFB7185)
+val RoseDark = Color(0xFF9F1239)
 
 // ─── Background / Surface (Light) ─────────────────────────────────────────
 val LightBg = Color(0xFFF8FAFC)
@@ -29,6 +31,7 @@ val LightContainer = Color(0xFFFFFFFF)
 val LightOnBg = Color(0xFF0F172A)
 val LightOnSurface = Color(0xFF1E293B)
 val LightOutline = Color(0xFFCBD5E1)
+val LightOutlineVariant = Color(0xFFE2E8F0)
 
 // ─── Background / Surface (Dark) ──────────────────────────────────────────
 val DarkBg = Color(0xFF0F172A)
@@ -38,6 +41,7 @@ val DarkContainer = Color(0xFF020617)
 val DarkOnBg = Color(0xFFF8FAFC)
 val DarkOnSurface = Color(0xFFF1F5F9)
 val DarkOutline = Color(0xFF475569)
+val DarkOutlineVariant = Color(0xFF334155)
 
 // ─── Semantic ─────────────────────────────────────────────────────────────
 val SuccessGreen = Color(0xFF10B981)

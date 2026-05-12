@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
@@ -23,12 +24,18 @@ import com.fmz.spenitaicore.ai.SavingTip
 import com.fmz.spenitaicore.ai.SpendingTrend
 import com.fmz.spenitaicore.ui.components.CompactTopAppBar
 import com.fmz.spenitaicore.ui.components.BannerAd
+import com.fmz.spenitaicore.ui.components.SharedImportsBadgeIcon
 import com.fmz.spenitaicore.ui.theme.*
 import com.fmz.spenitaicore.viewmodel.InsightsViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun InsightsScreen(viewModel: InsightsViewModel) {
+fun InsightsScreen(
+    viewModel: InsightsViewModel,
+    onNavigateToSharedImports: () -> Unit,
+    onNavigateToSettings: () -> Unit,
+    sharedImportCount: Int = 0
+) {
     val selectedRange by viewModel.selectedRange.collectAsStateWithLifecycle()
     val totalThisMonthText by viewModel.totalThisMonthText.collectAsStateWithLifecycle()
     val averageDailySpendText by viewModel.averageDailySpendText.collectAsStateWithLifecycle()
@@ -54,6 +61,12 @@ fun InsightsScreen(viewModel: InsightsViewModel) {
             CompactTopAppBar(
                 title = { Text("Insights") },
                 actions = {
+                    IconButton(onClick = onNavigateToSharedImports) {
+                        SharedImportsBadgeIcon(
+                            count = sharedImportCount,
+                            contentDescription = "Imports"
+                        )
+                    }
                     IconButton(
                         onClick = { viewModel.refreshInsights() },
                         enabled = !isRefreshing
@@ -66,6 +79,9 @@ fun InsightsScreen(viewModel: InsightsViewModel) {
                         } else {
                             Icon(Icons.Filled.Refresh, "Refresh")
                         }
+                    }
+                    IconButton(onClick = onNavigateToSettings) {
+                        Icon(Icons.Outlined.Settings, contentDescription = "Settings")
                     }
                 }
             )

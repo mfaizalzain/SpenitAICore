@@ -9,6 +9,9 @@ import com.fmz.spenitaicore.data.db.AppDatabase
 import com.fmz.spenitaicore.data.export.ExportService
 import com.fmz.spenitaicore.data.backup.BackupWorker
 import com.fmz.spenitaicore.data.backup.DriveBackupService
+import com.fmz.spenitaicore.data.preferences.THEME_MODE_DAY
+import com.fmz.spenitaicore.data.preferences.THEME_MODE_NIGHT
+import com.fmz.spenitaicore.data.preferences.THEME_MODE_SYSTEM
 import com.fmz.spenitaicore.util.SalaryCycle
 import com.google.android.gms.auth.UserRecoverableAuthException
 import kotlinx.coroutines.Dispatchers
@@ -28,6 +31,9 @@ class SettingsViewModel : ViewModel() {
 
     private val _selectedLanguageCode = MutableStateFlow("en")
     val selectedLanguageCode: StateFlow<String> = _selectedLanguageCode
+
+    private val _themeMode = MutableStateFlow(THEME_MODE_DAY)
+    val themeMode: StateFlow<String> = _themeMode
 
     private val _salaryPayDay = MutableStateFlow(SalaryCycle.DEFAULT_PAY_DAY)
     val salaryPayDay: StateFlow<Int> = _salaryPayDay
@@ -66,6 +72,12 @@ class SettingsViewModel : ViewModel() {
     )
 
     val availablePayDays = (1..31).toList()
+
+    val availableThemeModes = listOf(
+        THEME_MODE_DAY to "Day",
+        THEME_MODE_NIGHT to "Night",
+        THEME_MODE_SYSTEM to "Follow system"
+    )
 
     // ── AI Provider ───────────────────────────────────────────────────
 
@@ -110,6 +122,7 @@ class SettingsViewModel : ViewModel() {
             try {
                 _selectedCurrencyCode.value = preferences.getDefaultCurrency()
                 _selectedLanguageCode.value = preferences.getAppLanguage()
+                _themeMode.value = preferences.getThemeMode()
                 _salaryPayDay.value = preferences.getSalaryPayDay()
                 _isAppLockEnabled.value = preferences.getAppLockEnabled()
                 _aiProvider.value = preferences.getAiProvider()
@@ -136,6 +149,15 @@ class SettingsViewModel : ViewModel() {
             if (code.isNotBlank()) {
                 _selectedLanguageCode.value = code
                 preferences.setAppLanguage(code)
+            }
+        }
+    }
+
+    fun setThemeMode(mode: String) {
+        viewModelScope.launch {
+            if (availableThemeModes.any { it.first == mode }) {
+                _themeMode.value = mode
+                preferences.setThemeMode(mode)
             }
         }
     }

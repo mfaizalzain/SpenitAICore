@@ -5,66 +5,31 @@
     android:viewportHeight="108">
 
     <group
-        android:scaleX="0.76"
-        android:scaleY="0.76"
-        android:translateX="12.96"
-        android:translateY="12.96">
+        android:scaleX="0.82"
+        android:scaleY="0.82"
+        android:translateX="9.72"
+        android:translateY="9.72">
 
-        <!-- Soft brand glow -->
         <path
-            android:fillColor="#38BDF8"
-            android:fillAlpha="0.22"
-            android:pathData="M25,26 C35,15 55,12 70,19 C86,27 94,43 89,60 C84,78 67,89 48,86 C30,83 18,70 17,53 C16,43 18,34 25,26 Z" />
+            android:fillColor="#FFFFFF"
+            android:fillAlpha="0.13"
+            android:pathData="M22,32 C28,19 42,14 58,16 C76,19 88,32 89,50 C90,70 74,88 53,89 C34,90 18,78 16,59 C15,49 17,40 22,32 Z" />
 
-        <!-- Receipt body -->
         <path
-            android:fillColor="#F8FAFC"
-            android:pathData="M31,20 C31,17.8 32.8,16 35,16 L70,16 C72.2,16 74,17.8 74,20 L74,76 L69,72 L64,78 L59,72 L54,78 L49,72 L44,78 L39,72 L34,78 L31,76 Z" />
-
-        <!-- Folded corner -->
-        <path
-            android:fillColor="#E9D5FF"
-            android:pathData="M62,16 L74,28 L62,28 Z" />
-
-        <!-- Receipt detail lines -->
-        <path
-            android:fillColor="#7C3AED"
-            android:pathData="M39,32 L62,32 C63.7,32 65,33.3 65,35 C65,36.7 63.7,38 62,38 L39,38 C37.3,38 36,36.7 36,35 C36,33.3 37.3,32 39,32 Z" />
-        <path
-            android:fillColor="#14B8A6"
-            android:pathData="M39,44 L56,44 C57.7,44 59,45.3 59,47 C59,48.7 57.7,50 56,50 L39,50 C37.3,50 36,48.7 36,47 C36,45.3 37.3,44 39,44 Z" />
-
-        <!-- Scan sparkle -->
-        <path
-            android:strokeColor="#14B8A6"
-            android:strokeWidth="4"
-            android:strokeLineCap="round"
-            android:fillColor="@android:color/transparent"
-            android:pathData="M30,56 L46,56 M78,34 L88,34 M83,29 L83,39" />
-
-        <!-- AI chip -->
-        <path
-            android:fillColor="#020617"
-            android:pathData="M54,56 C54,52.7 56.7,50 60,50 L86,50 C89.3,50 92,52.7 92,56 L92,80 C92,83.3 89.3,86 86,86 L60,86 C56.7,86 54,83.3 54,80 Z" />
-
-        <!-- Chip pins -->
-        <path
-            android:strokeColor="#14B8A6"
-            android:strokeWidth="2"
-            android:strokeLineCap="round"
-            android:fillColor="@android:color/transparent"
-            android:pathData="M62,46 L62,50 M70,46 L70,50 M78,46 L78,50 M62,86 L62,90 M70,86 L70,90 M78,86 L78,90 M50,60 L54,60 M50,68 L54,68 M50,76 L54,76 M92,60 L96,60 M92,68 L96,68 M92,76 L96,76" />
-
-        <!-- AI core nodes -->
-        <path
-            android:strokeColor="#5EEAD4"
-            android:strokeWidth="3"
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="11"
             android:strokeLineCap="round"
             android:strokeLineJoin="round"
             android:fillColor="@android:color/transparent"
-            android:pathData="M67,68 L73,62 L80,68 L73,74 Z" />
+            android:pathData="M73,31 C67,24 52,22 42,28 C32,35 34,47 47,51 L60,55 C75,60 78,75 65,82 C55,88 39,85 32,76" />
+
         <path
-            android:fillColor="#5EEAD4"
-            android:pathData="M64,65 C64,63.3 65.3,62 67,62 C68.7,62 70,63.3 70,65 C70,66.7 68.7,68 67,68 C65.3,68 64,66.7 64,65 Z M70,74 C70,72.3 71.3,71 73,71 C74.7,71 76,72.3 76,74 C76,75.7 74.7,77 73,77 C71.3,77 70,75.7 70,74 Z M77,65 C77,63.3 78.3,62 80,62 C81.7,62 83,63.3 83,65 C83,66.7 81.7,68 80,68 C78.3,68 77,66.7 77,65 Z" />
+            android:fillColor="#CCFBF1"
+            android:pathData="M77,19 L81,29 L91,33 L81,37 L77,47 L73,37 L63,33 L73,29 Z" />
+
+        <path
+            android:fillColor="#FFFFFF"
+            android:fillAlpha="0.88"
+            android:pathData="M25,23 L27,28 L32,30 L27,32 L25,37 L23,32 L18,30 L23,28 Z" />
     </group>
 </vector>

@@ -1,6 +1,5 @@
 package com.fmz.spenitaicore.ui.components
 
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
@@ -10,7 +9,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 
 @Composable
@@ -32,12 +30,12 @@ fun SwipeToReveal(
             modifier = Modifier
                 .width(56.dp)
                 .fillMaxHeight()
-                .background(Color(0xFFB00020))
+                .background(MaterialTheme.colorScheme.error)
         ) {
             Icon(
                 Icons.Filled.Delete,
                 contentDescription = "Delete",
-                tint = Color.White
+                tint = MaterialTheme.colorScheme.onError
             )
         }
 
@@ -52,12 +50,12 @@ fun SwipeToReveal(
             modifier = Modifier
                 .width(56.dp)
                 .fillMaxHeight()
-                .background(Color(0xFF1565C0))
+                .background(MaterialTheme.colorScheme.secondary)
         ) {
             Icon(
                 Icons.Filled.Edit,
                 contentDescription = "Edit",
-                tint = Color.White
+                tint = MaterialTheme.colorScheme.onSecondary
             )
         }
     }

@@ -6,9 +6,12 @@ import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import com.fmz.spenitaicore.data.preferences.THEME_MODE_NIGHT
+import com.fmz.spenitaicore.data.preferences.THEME_MODE_SYSTEM
 import com.fmz.spenitaicore.data.db.entity.SharedImportItem
 import com.fmz.spenitaicore.data.db.entity.SharedImportKind
 import com.fmz.spenitaicore.data.db.entity.SharedImportStatus
@@ -38,7 +41,14 @@ class MainActivity : AppCompatActivity() {
 
         setContent {
             val shareSignal by sharedImportSignal
-            SpenItTheme {
+            val themeMode by app.container.preferences.themeMode.collectAsState(initial = "day")
+            val useDarkTheme = when (themeMode) {
+                THEME_MODE_NIGHT -> true
+                THEME_MODE_SYSTEM -> isSystemInDarkTheme()
+                else -> false
+            }
+
+            SpenItTheme(darkTheme = useDarkTheme) {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     SpenItNavHost(
                         container = app.container,

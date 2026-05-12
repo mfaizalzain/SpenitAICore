@@ -28,6 +28,9 @@ interface ReceiptDao {
     @Query("SELECT * FROM Receipts WHERE is_tax_deductible = 1 AND tax_year = :taxYear ORDER BY date DESC, created_at DESC")
     fun getTaxReceipts(taxYear: String): Flow<List<Receipt>>
 
+    @Query("SELECT * FROM Receipts WHERE is_tax_deductible = 1 AND tax_year = :taxYear ORDER BY date DESC, created_at DESC")
+    suspend fun getTaxReceiptsSync(taxYear: String): List<Receipt>
+
     @Query("SELECT * FROM Receipts WHERE id = :id")
     suspend fun getReceiptById(id: Int): Receipt?
 

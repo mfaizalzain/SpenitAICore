@@ -1,11 +1,9 @@
 package com.fmz.spenitaicore.viewmodel
 
-import android.app.Activity
-import android.content.Intent
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fmz.spenitaicore.SpenItApp
-import com.fmz.spenitaicore.data.auth.PasskeyResult
 import com.fmz.spenitaicore.data.db.entity.UserProfile
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -51,17 +49,11 @@ class AuthViewModel : ViewModel() {
 
     // ── Google Sign-In ────────────────────────────────────────────
 
-    fun getGoogleSignInIntent(): Intent = authService.getGoogleSignInIntent()
-
-    fun handleGoogleSignInResult(resultCode: Int, data: Intent?) {
-        if (resultCode != Activity.RESULT_OK) {
-            _state.value = _state.value.copy(isLoading = false)
-            return
-        }
+    fun signInWithGoogle(activityContext: Context) {
         viewModelScope.launch {
             _state.value = _state.value.copy(isLoading = true, error = null)
             try {
-                val result = authService.parseGoogleSignInResult(data)
+                val result = authService.signInWithGoogle(activityContext)
                 persistLogin(
                     authMethod = "google",
                     name = result.name,
@@ -187,9 +179,18 @@ class AuthViewModel : ViewModel() {
 
     fun signOut() {
         viewModelScope.launch {
-            preferences.clearAuth()
-            container.database.userProfileDao().deleteAll()
-            _state.value = AuthState()
+            _state.value = _state.value.copy(isLoading = true, error = null)
+            try {
+                preferences.clearAuth()
+                authService.clearCredentialState()
+                container.database.userProfileDao().deleteAll()
+                _state.value = AuthState()
+            } catch (e: Exception) {
+                _state.value = _state.value.copy(
+                    isLoading = false,
+                    error = e.message ?: "Sign out failed. Please try again."
+                )
+            }
         }
     }
 

@@ -42,9 +42,11 @@ import com.fmz.spenitaicore.viewmodel.SettingsViewModel
 fun SettingsScreen(
     viewModel: SettingsViewModel,
     authViewModel: AuthViewModel,
+    onNavigateBack: () -> Unit,
     onSignOut: () -> Unit
 ) {
     val selectedCurrency by viewModel.selectedCurrencyCode.collectAsStateWithLifecycle()
+    val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
     val salaryPayDay by viewModel.salaryPayDay.collectAsStateWithLifecycle()
     val isAppLockEnabled by viewModel.isAppLockEnabled.collectAsStateWithLifecycle()
     val isBusy by viewModel.isBusy.collectAsStateWithLifecycle()
@@ -97,6 +99,7 @@ fun SettingsScreen(
 
     var showTaxYearDropdown by remember { mutableStateOf(false) }
     var showCurrencyDropdown by remember { mutableStateOf(false) }
+    var showThemeDropdown by remember { mutableStateOf(false) }
     var showPayDayDropdown by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
@@ -111,12 +114,6 @@ fun SettingsScreen(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         // Re-composition via LiveData/State handles updates
-    }
-
-    val googleSignInLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        authViewModel.handleGoogleSignInResult(result.resultCode, result.data)
     }
 
     // Trigger share when export completes
@@ -178,7 +175,14 @@ fun SettingsScreen(
 
     Scaffold(
         topBar = {
-            CompactTopAppBar(title = { Text("Settings") })
+            CompactTopAppBar(
+                title = { Text("Settings") },
+                navigationIcon = {
+                    IconButton(onClick = onNavigateBack) {
+                        Icon(Icons.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                }
+            )
         }
     ) { padding ->
         LazyColumn(
@@ -251,9 +255,11 @@ fun SettingsScreen(
                 item {
                     Spacer(modifier = Modifier.height(4.dp))
                     SettingsItem(
-                        title = "Sign Out",
-                        subtitle = "Disconnect your Google account",
+                        title = if (authState.isLoading) "Signing out..." else "Sign Out",
+                        subtitle = if (authState.isLoading) "Disconnecting your Google account" else "Disconnect your Google account",
                         icon = Icons.Outlined.Logout,
+                        enabled = !authState.isLoading,
+                        isLoading = authState.isLoading,
                         onClick = { authViewModel.signOut() }
                     )
                 }
@@ -265,7 +271,7 @@ fun SettingsScreen(
                         subtitle = "Back up your data and sync across devices",
                         icon = Icons.Outlined.AccountCircle,
                         onClick = {
-                            googleSignInLauncher.launch(authViewModel.getGoogleSignInIntent())
+                            authViewModel.signInWithGoogle(context)
                         }
                     )
                 }
@@ -297,6 +303,32 @@ fun SettingsScreen(
                                 onClick = {
                                     viewModel.setCurrency(code)
                                     showCurrencyDropdown = false
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Theme
+            item {
+                Box {
+                    SettingsItem(
+                        title = "Theme",
+                        subtitle = viewModel.availableThemeModes.firstOrNull { it.first == themeMode }?.second ?: "Day",
+                        icon = Icons.Filled.DarkMode,
+                        onClick = { showThemeDropdown = true }
+                    )
+                    DropdownMenu(
+                        expanded = showThemeDropdown,
+                        onDismissRequest = { showThemeDropdown = false }
+                    ) {
+                        viewModel.availableThemeModes.forEach { (mode, label) ->
+                            DropdownMenuItem(
+                                text = { Text(label) },
+                                onClick = {
+                                    viewModel.setThemeMode(mode)
+                                    showThemeDropdown = false
                                 }
                             )
                         }
@@ -1152,12 +1184,14 @@ fun SettingsItem(
     title: String,
     subtitle: String,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
+    enabled: Boolean = true,
+    isLoading: Boolean = false,
     onClick: () -> Unit
 ) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
+            .clickable(enabled = enabled, onClick = onClick),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         )
@@ -1168,17 +1202,29 @@ fun SettingsItem(
                 .padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(icon, contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(24.dp))
+            if (isLoading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(24.dp),
+                    strokeWidth = 2.dp
+                )
+            } else {
+                Icon(
+                    icon,
+                    contentDescription = null,
+                    tint = if (enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
             Spacer(modifier = Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(title, style = MaterialTheme.typography.bodyLarge)
                 Text(subtitle, style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Icon(Icons.Filled.ChevronRight, contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (!isLoading) {
+                Icon(Icons.Filled.ChevronRight, contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
     }
 }

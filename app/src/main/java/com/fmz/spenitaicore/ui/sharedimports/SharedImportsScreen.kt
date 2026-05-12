@@ -21,7 +21,6 @@ import com.fmz.spenitaicore.data.db.entity.SharedImportKind
 import com.fmz.spenitaicore.data.db.entity.SharedImportStatus
 import com.fmz.spenitaicore.ui.components.CompactTopAppBar
 import com.fmz.spenitaicore.viewmodel.SharedImportsViewModel
-import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.clickable
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -191,7 +190,7 @@ fun SharedImportsScreen(
                         .padding(horizontal = 16.dp)
                         .padding(bottom = 2.dp),
                     colors = CardDefaults.cardColors(
-                        containerColor = Color(0xFFFFF3E0)
+                        containerColor = MaterialTheme.colorScheme.tertiaryContainer
                     )
                 ) {
                     Row(
@@ -203,14 +202,14 @@ fun SharedImportsScreen(
                         Icon(
                             Icons.Filled.Warning,
                             contentDescription = null,
-                            tint = Color(0xFFE65100),
+                            tint = MaterialTheme.colorScheme.onTertiaryContainer,
                             modifier = Modifier.size(20.dp)
                         )
                         Spacer(Modifier.width(8.dp))
                         Text(
                             "$unclassifiedCount file(s) need a type selected — tap \"Choose Type\" on each file",
                             style = MaterialTheme.typography.bodySmall,
-                            color = Color(0xFFBF360C)
+                            color = MaterialTheme.colorScheme.onTertiaryContainer
                         )
                     }
                 }

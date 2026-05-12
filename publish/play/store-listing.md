@@ -35,7 +35,7 @@ Finance
 - Data transfer/security: describe Google Drive backup and sign-in behavior accurately
 
 ## Asset Alt Text
-- App icon: SpenIt AICore receipt and AI chip logo on a violet, teal, and slate background.
+- App icon: SpenIt AICore spend-path mark with an AI spark on an indigo and teal background.
 - Feature graphic: SpenIt AICore brand graphic with receipt and AI chip mark.
 - Phone dashboard screenshot: Dashboard showing balance, spending cards, quick actions, and recent expenses.
 - Phone expenses screenshot: Expenses tab showing tracked spending records.

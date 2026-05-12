@@ -16,6 +16,7 @@ class AppPreferences(private val context: Context) {
         val KEY_DEFAULT_CURRENCY = stringPreferencesKey("default_currency_code")
         val KEY_SALARY_PAY_DAY = intPreferencesKey("salary_pay_day")
         val KEY_APP_LANGUAGE = stringPreferencesKey("app_language")
+        val KEY_THEME_MODE = stringPreferencesKey("theme_mode")
         val KEY_APP_LOCK_ENABLED = booleanPreferencesKey("app_lock_enabled")
         val KEY_IS_LOGGED_IN = booleanPreferencesKey("is_logged_in")
         val KEY_GOOGLE_ID = stringPreferencesKey("google_id")
@@ -62,6 +63,21 @@ class AppPreferences(private val context: Context) {
 
     suspend fun setAppLanguage(language: String) {
         context.dataStore.edit { it[KEY_APP_LANGUAGE] = language }
+    }
+
+    val themeMode: Flow<String> = context.dataStore.data.map { prefs ->
+        prefs[KEY_THEME_MODE] ?: THEME_MODE_DAY
+    }
+
+    suspend fun getThemeMode(): String =
+        context.dataStore.data.first()[KEY_THEME_MODE] ?: THEME_MODE_DAY
+
+    suspend fun setThemeMode(mode: String) {
+        val normalizedMode = when (mode) {
+            THEME_MODE_DAY, THEME_MODE_NIGHT, THEME_MODE_SYSTEM -> mode
+            else -> THEME_MODE_DAY
+        }
+        context.dataStore.edit { it[KEY_THEME_MODE] = normalizedMode }
     }
 
     val isAppLockEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->
@@ -193,3 +209,7 @@ class AppPreferences(private val context: Context) {
         context.dataStore.edit { it.clear() }
     }
 }
+
+const val THEME_MODE_DAY = "day"
+const val THEME_MODE_NIGHT = "night"
+const val THEME_MODE_SYSTEM = "system"

@@ -3,8 +3,8 @@ package com.fmz.spenitaicore.ui.auth
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.Image
 import androidx.compose.material.icons.Icons
@@ -15,13 +15,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -47,12 +46,6 @@ fun LoginScreen(
                 .canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG) ==
                     BiometricManager.BIOMETRIC_SUCCESS
         } catch (_: Exception) { false }
-    }
-
-    val googleSignInLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        viewModel.handleGoogleSignInResult(result.resultCode, result.data)
     }
 
     val showBiometricPrompt = remember { mutableStateOf(false) }
@@ -90,17 +83,19 @@ fun LoginScreen(
     }
 
     val primaryColor = MaterialTheme.colorScheme.primary
-    val primaryContainer = MaterialTheme.colorScheme.primaryContainer
+    val secondaryColor = MaterialTheme.colorScheme.secondary
 
     Box(modifier = Modifier.fillMaxSize()) {
-        // Gradient top background
         Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .fillMaxHeight(0.58f)
+                .fillMaxSize()
                 .background(
                     Brush.verticalGradient(
-                        listOf(primaryColor, primaryContainer)
+                        listOf(
+                            primaryColor,
+                            secondaryColor,
+                            secondaryColor
+                        )
                     )
                 )
         )
@@ -118,21 +113,7 @@ fun LoginScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
-                // App mark
-                Card(
-                    modifier = Modifier.size(108.dp),
-                    shape = CircleShape,
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f)),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 10.dp)
-                ) {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Image(
-                            painter = painterResource(id = R.drawable.ic_launcher_foreground),
-                            contentDescription = null,
-                            modifier = Modifier.size(92.dp)
-                        )
-                    }
-                }
+                AppIconMark()
 
                 Spacer(modifier = Modifier.height(20.dp))
 
@@ -169,7 +150,7 @@ fun LoginScreen(
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.surface
                 ),
-                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
             ) {
                 Column(
                     modifier = Modifier
@@ -212,10 +193,10 @@ fun LoginScreen(
 
                     // Google Sign-In
                     SignInButton(
-                        onClick = { googleSignInLauncher.launch(viewModel.getGoogleSignInIntent()) },
+                        onClick = { viewModel.signInWithGoogle(context) },
                         enabled = !state.isLoading,
                         isLoading = state.isLoading,
-                        label = "Continue with Google",
+                        label = "Sign in with Google",
                         leading = {
                             Text(
                                 text = "G",
@@ -249,6 +230,36 @@ fun LoginScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun AppIconMark() {
+    Box(
+        modifier = Modifier
+            .size(112.dp)
+            .clip(RoundedCornerShape(28.dp))
+            .background(
+                Brush.linearGradient(
+                    listOf(
+                        MaterialTheme.colorScheme.secondaryContainer,
+                        MaterialTheme.colorScheme.secondary,
+                        MaterialTheme.colorScheme.primary
+                    )
+                )
+            )
+            .border(
+                width = 1.dp,
+                color = Color.White.copy(alpha = 0.36f),
+                shape = RoundedCornerShape(28.dp)
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Image(
+            painter = painterResource(id = R.drawable.ic_launcher_foreground),
+            contentDescription = null,
+            modifier = Modifier.size(104.dp)
+        )
     }
 }
 

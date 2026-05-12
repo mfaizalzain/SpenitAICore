@@ -183,17 +183,24 @@ fun SpenItNavHost(
             }
 
             composable(Screen.Insights.route) {
-                InsightsScreen(viewModel = insightsViewModel)
+                InsightsScreen(
+                    viewModel = insightsViewModel,
+                    onNavigateToSharedImports = { navController.navigate("shared_imports") },
+                    onNavigateToSettings = { navController.navigate(Screen.Settings.route) },
+                    sharedImportCount = sharedImportCount
+                )
             }
 
             composable(Screen.TaxRelief.route) {
                 val taxReliefViewModel = remember { TaxReliefViewModel() }
                 TaxReliefScreen(
                     viewModel = taxReliefViewModel,
+                    onNavigateToSharedImports = { navController.navigate("shared_imports") },
                     onNavigateToSettings = { navController.navigate(Screen.Settings.route) },
                     onNavigateToEditReceipt = { receiptId ->
                         navController.navigate("receipt_scan?receiptId=$receiptId")
-                    }
+                    },
+                    sharedImportCount = sharedImportCount
                 )
             }
 
@@ -201,6 +208,7 @@ fun SpenItNavHost(
                 SettingsScreen(
                     viewModel = settingsViewModel,
                     authViewModel = authViewModel,
+                    onNavigateBack = { navController.popBackStack() },
                     onSignOut = {
                         navController.navigate("login") {
                             popUpTo(0) { inclusive = true }

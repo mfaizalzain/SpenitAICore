@@ -71,6 +71,7 @@ fun DashboardScreen(
 
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showConvertConfirm by remember { mutableStateOf(false) }
+    var showFabMenu by remember { mutableStateOf(false) }
     var pendingDeleteReceipt by remember { mutableStateOf<Receipt?>(null) }
 
     LaunchedEffect(Unit) {
@@ -97,12 +98,18 @@ fun DashboardScreen(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = onNavigateToScan,
-                shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)
-            ) {
-                Icon(Icons.Filled.Add, contentDescription = "Add Expense")
-            }
+            DashboardFabMenu(
+                expanded = showFabMenu,
+                onExpandedChange = { showFabMenu = it },
+                onAddExpense = {
+                    showFabMenu = false
+                    onNavigateToScan()
+                },
+                onAddIncome = {
+                    showFabMenu = false
+                    onNavigateToPaySlipScan()
+                }
+            )
         }
     ) { padding ->
         LazyColumn(
@@ -694,6 +701,59 @@ fun DashboardScreen(
                 }
             }
         )
+    }
+}
+
+@Composable
+private fun DashboardFabMenu(
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
+    onAddExpense: () -> Unit,
+    onAddIncome: () -> Unit
+) {
+    Column(
+        horizontalAlignment = Alignment.End,
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        if (expanded) {
+            SmallFloatingActionButton(
+                onClick = onAddIncome,
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Filled.Payments, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Add Income")
+                }
+            }
+            SmallFloatingActionButton(
+                onClick = onAddExpense,
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Filled.Receipt, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Add Expense")
+                }
+            }
+        }
+        FloatingActionButton(
+            onClick = { onExpandedChange(!expanded) },
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)
+        ) {
+            Icon(
+                imageVector = if (expanded) Icons.Filled.Close else Icons.Filled.Add,
+                contentDescription = if (expanded) "Close add menu" else "Open add menu"
+            )
+        }
     }
 }
 

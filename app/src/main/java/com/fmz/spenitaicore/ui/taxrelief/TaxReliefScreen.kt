@@ -1,260 +1,405 @@
 package com.fmz.spenitaicore.ui.taxrelief
 
-import androidx.compose.animation.AnimatedVisibility
+import android.content.Intent
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.FileDownload
+import androidx.compose.material.icons.filled.Receipt
+import androidx.compose.material.icons.outlined.FolderZip
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.fmz.spenitaicore.data.db.entity.Receipt
 import com.fmz.spenitaicore.ui.components.CompactTopAppBar
+import com.fmz.spenitaicore.ui.components.SharedImportsBadgeIcon
+import com.fmz.spenitaicore.util.CurrencyFormatter
+import com.fmz.spenitaicore.util.DateUtils
+import com.fmz.spenitaicore.viewmodel.TaxCategorySummary
 import com.fmz.spenitaicore.viewmodel.TaxReliefViewModel
+import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TaxReliefScreen(
     viewModel: TaxReliefViewModel,
+    onNavigateToSharedImports: () -> Unit,
     onNavigateToSettings: () -> Unit,
-    onNavigateToEditReceipt: (Int) -> Unit
+    onNavigateToEditReceipt: (Int) -> Unit,
+    sharedImportCount: Int = 0
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val context = LocalContext.current
     var showYearDropdown by remember { mutableStateOf(false) }
+
+    LaunchedEffect(state.exportResult) {
+        state.exportResult?.let { result ->
+            val zipFile = File(result.zipPath)
+            val uri = FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.fileprovider",
+                zipFile
+            )
+            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                type = "application/zip"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                putExtra(Intent.EXTRA_SUBJECT, "Tax Relief Export ${state.selectedYear}")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            context.startActivity(Intent.createChooser(shareIntent, "Share Tax Relief Export"))
+            viewModel.clearExportResult()
+        }
+    }
 
     Scaffold(
         topBar = {
             CompactTopAppBar(
                 title = { Text("Tax Relief") },
                 actions = {
+                    IconButton(onClick = onNavigateToSharedImports) {
+                        SharedImportsBadgeIcon(
+                            count = sharedImportCount,
+                            contentDescription = "Imports"
+                        )
+                    }
                     IconButton(onClick = onNavigateToSettings) {
-                        Icon(Icons.Filled.Settings, contentDescription = "Settings")
+                        Icon(Icons.Outlined.Settings, contentDescription = "Settings")
                     }
                 }
             )
         }
     ) { padding ->
-        if (state.isLoading) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
-                contentAlignment = Alignment.Center
-            ) {
-                CircularProgressIndicator()
-            }
-        } else if (state.availableYears.isEmpty() && state.categories.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    "No tax-deductible expenses yet.\nMark expenses as Tax Deductible to see them here.",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                // Year selector
-                item {
-                    Box {
-                        OutlinedTextField(
-                            value = state.selectedYear,
-                            onValueChange = {},
-                            label = { Text("Tax Year") },
-                            modifier = Modifier.fillMaxWidth(),
-                            readOnly = true,
-                            trailingIcon = {
-                                IconButton(onClick = { showYearDropdown = true }) {
-                                    Icon(Icons.Filled.ArrowDropDown, null)
-                                }
-                            }
-                        )
-                        DropdownMenu(
-                            expanded = showYearDropdown,
-                            onDismissRequest = { showYearDropdown = false }
-                        ) {
-                            state.availableYears.forEach { year ->
-                                DropdownMenuItem(
-                                    text = { Text(year) },
-                                    onClick = {
-                                        viewModel.selectYear(year)
-                                        showYearDropdown = false
-                                    }
-                                )
-                            }
-                        }
-                    }
-                }
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+        ) {
+            TaxReliefHeader(
+                selectedYear = state.selectedYear,
+                availableYears = state.availableYears,
+                totalRelief = state.totalRelief,
+                receiptCount = state.receipts.size,
+                categoryCount = state.categories.size,
+                currency = state.currency,
+                isExporting = state.isExporting,
+                canExport = state.receipts.isNotEmpty() && !state.isLoading,
+                showYearDropdown = showYearDropdown,
+                onShowYearDropdownChange = { showYearDropdown = it },
+                onYearSelected = viewModel::selectYear,
+                onExport = viewModel::exportSelectedYear
+            )
 
-                // Total relief card
-                item {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.primaryContainer
-                        )
+            state.exportError?.let { error ->
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column(
-                            modifier = Modifier.padding(16.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Text(
-                                "Total Tax Relief",
-                                style = MaterialTheme.typography.labelLarge
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                "\$ ${"%.2f".format(state.totalRelief)}",
-                                style = MaterialTheme.typography.headlineMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
-                            if (state.categories.isNotEmpty()) {
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    "${state.categories.sumOf { it.receipts.size }} receipts across ${state.categories.size} categories",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
-                                )
-                            }
+                        Text(
+                            text = error,
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                        TextButton(onClick = viewModel::clearExportError) {
+                            Text("Dismiss")
                         }
                     }
                 }
+            }
 
-                // Categories grouped
-                state.categories.forEach { summary ->
-                    item {
-                        CategorySection(
-                            summary = summary,
-                            onReceiptClick = onNavigateToEditReceipt
-                        )
+            when {
+                state.isLoading -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator()
                     }
                 }
 
-                item { Spacer(modifier = Modifier.height(8.dp)) }
+                state.receipts.isEmpty() -> {
+                    EmptyTaxReliefState(modifier = Modifier.fillMaxSize())
+                }
+
+                else -> {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        if (state.categories.isNotEmpty()) {
+                            item {
+                                CategorySummaryRow(
+                                    categories = state.categories,
+                                    currency = state.currency
+                                )
+                            }
+                        }
+
+                        item {
+                            Text(
+                                "Deductible expenses",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
+                            )
+                        }
+
+                        items(state.receipts, key = { it.id }) { receipt ->
+                            TaxReceiptCard(
+                                receipt = receipt,
+                                onClick = { onNavigateToEditReceipt(receipt.id) }
+                            )
+                        }
+                    }
+                }
             }
         }
     }
 }
 
 @Composable
-private fun CategorySection(
-    summary: com.fmz.spenitaicore.viewmodel.TaxCategorySummary,
-    onReceiptClick: (Int) -> Unit
+private fun TaxReliefHeader(
+    selectedYear: String,
+    availableYears: List<String>,
+    totalRelief: Double,
+    receiptCount: Int,
+    categoryCount: Int,
+    currency: String,
+    isExporting: Boolean,
+    canExport: Boolean,
+    showYearDropdown: Boolean,
+    onShowYearDropdownChange: (Boolean) -> Unit,
+    onYearSelected: (String) -> Unit,
+    onExport: () -> Unit
 ) {
-    var expanded by remember { mutableStateOf(false) }
-
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 12.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-        )
+            containerColor = MaterialTheme.colorScheme.primaryContainer
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
-        Column {
-            // Category header — tappable to expand/collapse
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { expanded = !expanded }
-                    .padding(12.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        summary.category,
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Text(
-                        "${summary.receipts.size} receipt${if (summary.receipts.size != 1) "s" else ""}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Column(horizontalAlignment = Alignment.End) {
-                    Text(
-                        "\$ ${"%.2f".format(summary.totalTaxAmount)}",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-                Spacer(modifier = Modifier.width(4.dp))
-                Icon(
-                    if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
-                    contentDescription = if (expanded) "Collapse" else "Expand",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            // Receipt list (collapsible)
-            AnimatedVisibility(visible = expanded) {
-                Column {
-                    HorizontalDivider(
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                    )
-                    summary.receipts.forEach { receipt ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { onReceiptClick(receipt.id) }
-                                .padding(horizontal = 12.dp, vertical = 10.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    receipt.merchant,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Medium,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                Text(
-                                    receipt.date,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            Column(horizontalAlignment = Alignment.End) {
-                                Text(
-                                    "\$ ${"%.2f".format(receipt.total)}",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                                Text(
-                                    "Tax: \$ ${"%.2f".format(receipt.taxAmount)}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                            }
-                        }
-                        if (receipt != summary.receipts.last()) {
-                            HorizontalDivider(
-                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
-                                modifier = Modifier.padding(horizontal = 12.dp)
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(modifier = Modifier.weight(1f)) {
+                    FilledTonalButton(
+                        onClick = { onShowYearDropdownChange(true) },
+                        shape = RoundedCornerShape(14.dp)
+                    ) {
+                        Text(selectedYear.ifBlank { "Tax year" })
+                        Spacer(Modifier.width(4.dp))
+                        Icon(Icons.Filled.ArrowDropDown, contentDescription = null)
+                    }
+                    DropdownMenu(
+                        expanded = showYearDropdown,
+                        onDismissRequest = { onShowYearDropdownChange(false) }
+                    ) {
+                        availableYears.forEach { year ->
+                            DropdownMenuItem(
+                                text = { Text(year) },
+                                onClick = {
+                                    onYearSelected(year)
+                                    onShowYearDropdownChange(false)
+                                }
                             )
                         }
                     }
                 }
+                FilledTonalButton(
+                    onClick = onExport,
+                    enabled = canExport && !isExporting,
+                    shape = RoundedCornerShape(14.dp)
+                ) {
+                    if (isExporting) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Icon(Icons.Outlined.FolderZip, contentDescription = null)
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Text(if (isExporting) "Exporting" else "Export ZIP")
+                }
             }
+
+            Spacer(Modifier.height(16.dp))
+
+            Text("Total tax relief", style = MaterialTheme.typography.labelLarge)
+            Spacer(Modifier.height(2.dp))
+            Text(
+                CurrencyFormatter.format(totalRelief, currency),
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onPrimaryContainer
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "$receiptCount expense${if (receiptCount == 1) "" else "s"} across $categoryCount categor${if (categoryCount == 1) "y" else "ies"}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.72f)
+            )
+        }
+    }
+}
+
+@Composable
+private fun CategorySummaryRow(
+    categories: List<TaxCategorySummary>,
+    currency: String
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        categories.take(2).forEach { category ->
+            Card(
+                modifier = Modifier.weight(1f),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                )
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text(
+                        category.category,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.labelLarge
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        CurrencyFormatter.formatCompact(category.totalTaxAmount, currency),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        "${category.receipts.size} item${if (category.receipts.size == 1) "" else "s"}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TaxReceiptCard(
+    receipt: Receipt,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                modifier = Modifier.size(48.dp),
+                shape = RoundedCornerShape(24.dp),
+                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text(receipt.categoryIcon, style = MaterialTheme.typography.titleMedium)
+                }
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    receipt.merchant,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    "${receipt.taxCategory ?: receipt.category} · ${DateUtils.format(receipt.date)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Column(horizontalAlignment = Alignment.End) {
+                Text(
+                    CurrencyFormatter.format(receipt.taxAmount, receipt.currency),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Text(
+                    "Spent ${CurrencyFormatter.format(receipt.total, receipt.currency)}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun EmptyTaxReliefState(modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier.padding(32.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(
+                Icons.Filled.Receipt,
+                contentDescription = null,
+                modifier = Modifier.size(48.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(12.dp))
+            Text(
+                "No tax-deductible expenses",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Mark expenses as tax deductible to see them here.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }

@@ -33,11 +33,8 @@ class ReceiptRepository(
 
     suspend fun searchReceipts(query: String): List<Receipt> = receiptDao.searchReceipts(query)
 
-    suspend fun getTaxReceipts(taxYear: String): List<Receipt> {
-        var list = emptyList<Receipt>()
-        receiptDao.getTaxReceipts(taxYear).collect { list = it; return@collect }
-        return list
-    }
+    suspend fun getTaxReceipts(taxYear: String): List<Receipt> =
+        receiptDao.getTaxReceiptsSync(taxYear)
 
     suspend fun getTotalSpend(from: String, to: String): Double = receiptDao.getTotalSpend(from, to)
 
