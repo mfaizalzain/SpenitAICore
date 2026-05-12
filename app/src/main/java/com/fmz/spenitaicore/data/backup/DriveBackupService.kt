@@ -4,14 +4,21 @@ import android.accounts.Account
 import android.accounts.AccountManager
 import android.content.Context
 import android.util.Log
+import com.fmz.spenitaicore.SpenItApp
+import com.fmz.spenitaicore.data.db.entity.IncomeEntry
+import com.fmz.spenitaicore.data.db.entity.Receipt
 import com.google.android.gms.auth.GoogleAuthUtil
 import com.google.android.gms.auth.UserRecoverableAuthException
 import org.json.JSONObject
 import java.io.File
 import java.io.FileInputStream
+import java.io.FileOutputStream
 import java.io.OutputStream
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.zip.ZipEntry
+import java.util.zip.ZipInputStream
+import java.util.zip.ZipOutputStream
 
 class DriveBackupService(private val context: Context) {
 
@@ -276,5 +283,94 @@ class DriveBackupService(private val context: Context) {
 
         Log.e(TAG, "Upload failed: $responseCode $responseBody")
         return null
+    }
+
+    // ── Backup package (ZIP: db + media) ────────────────────────────
+
+    /**
+     * Create a ZIP backup package containing the database and all attached
+     * media files (receipt images, PDFs, income attachments).
+     * Returns the ZIP file path, or null on failure.
+     */
+    suspend fun createBackupPackage(): File? {
+        return try {
+            val receipts = SpenItApp.instance.container.receiptRepository.getReceiptsFromSync(null)
+            val incomes = SpenItApp.instance.container.incomeRepository.getIncomeEntriesFromSync(null)
+
+            val zipFile = File(context.cacheDir, "spenit_backup_${System.currentTimeMillis()}.zip")
+            ZipOutputStream(FileOutputStream(zipFile)).use { zos ->
+
+                // 1. Add database
+                val dbFile = context.getDatabasePath("spenit.db")
+                if (dbFile.exists()) {
+                    zos.putNextEntry(ZipEntry("spenit.db"))
+                    dbFile.inputStream().use { it.copyTo(zos) }
+                    zos.closeEntry()
+                }
+
+                // 2. Add media files (deduplicated by path)
+                val mediaPaths = linkedSetOf<String>()
+                receipts.forEach { r -> r.imagePath?.takeIf { it.isNotEmpty() && !it.startsWith("content://") }?.let { mediaPaths.add(it) } }
+                incomes.forEach { e -> e.imagePath?.takeIf { it.isNotEmpty() && !it.startsWith("content://") }?.let { mediaPaths.add(it) } }
+
+                val filesDir = context.filesDir.absolutePath
+                val cacheDir = context.cacheDir.absolutePath
+
+                mediaPaths.forEach { path ->
+                    val file = File(path)
+                    if (file.exists()) {
+                        val relativePath = when {
+                            path.startsWith(filesDir) -> "files/${path.removePrefix(filesDir).trimStart('/')}"
+                            path.startsWith(cacheDir) -> "cache/${path.removePrefix(cacheDir).trimStart('/')}"
+                            else -> "media/${file.name}"
+                        }
+                        zos.putNextEntry(ZipEntry(relativePath))
+                        file.inputStream().use { it.copyTo(zos) }
+                        zos.closeEntry()
+                    }
+                }
+            }
+
+            if (zipFile.exists() && zipFile.length() > 0) zipFile else null
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to create backup package", e)
+            null
+        }
+    }
+
+    /**
+     * Extract a ZIP backup package: restore database and media files.
+     * Returns true on success.
+     */
+    fun extractBackupPackage(zipFile: File): Boolean {
+        return try {
+            val filesDir = context.filesDir
+            val cacheDir = context.cacheDir
+            val dbDir = context.getDatabasePath("spenit.db").parentFile!!
+
+            ZipInputStream(FileInputStream(zipFile)).use { zis ->
+                var entry: ZipEntry? = zis.nextEntry
+                while (entry != null) {
+                    val name = entry.name
+                    val targetFile = when {
+                        name == "spenit.db" -> File(dbDir, "spenit.db")
+                        name.startsWith("files/") -> File(filesDir, name.removePrefix("files/"))
+                        name.startsWith("cache/") -> File(cacheDir, name.removePrefix("cache/"))
+                        name.startsWith("media/") -> File(filesDir, "shared_imports/${name.removePrefix("media/")}")
+                        else -> null
+                    }
+                    if (targetFile != null) {
+                        targetFile.parentFile?.mkdirs()
+                        targetFile.outputStream().use { zis.copyTo(it) }
+                    }
+                    zis.closeEntry()
+                    entry = zis.nextEntry
+                }
+            }
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to extract backup package", e)
+            false
+        }
     }
 }

@@ -117,6 +117,16 @@ fun ReceiptScanScreen(
                     }
                 },
                 actions = {
+                    if (viewModel.isEditing) {
+                        TextButton(
+                            onClick = {
+                                viewModel.convertToOppositeType(onNavigateBack)
+                            },
+                            enabled = !isBusy
+                        ) {
+                            Text("Convert")
+                        }
+                    }
                     TextButton(
                         onClick = {
                             viewModel.saveReceipt()

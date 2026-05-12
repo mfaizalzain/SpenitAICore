@@ -32,7 +32,7 @@ import kotlinx.coroutines.flow.Flow
 sealed class Screen(val route: String, val title: String, val icon: ImageVector, val selectedIcon: ImageVector) {
     data object Dashboard : Screen("dashboard", "Dashboard", Icons.Outlined.Home, Icons.Filled.Home)
     data object Expenses : Screen("expenses", "Expenses", Icons.Outlined.Receipt, Icons.Filled.Receipt)
-    data object Income : Screen("income", "Income", Icons.Outlined.TrendingUp, Icons.Filled.TrendingUp)
+    data object Income : Screen("income", "Income", Icons.Outlined.Payments, Icons.Filled.Payments)
     data object Insights : Screen("insights", "Insights", Icons.Outlined.Insights, Icons.Filled.Insights)
     data object Settings : Screen("settings", "Settings", Icons.Outlined.Settings, Icons.Filled.Settings)
 }

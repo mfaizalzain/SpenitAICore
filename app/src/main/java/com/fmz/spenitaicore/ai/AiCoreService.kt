@@ -51,9 +51,192 @@ class AiCoreService(
     private val preferences: AppPreferences,
     private val receiptRepository: ReceiptRepository
 ) {
+    private val remoteAiService = RemoteAiService(context)
+
+    // ── Remote provider helpers ──────────────────────────────────────────
+
+    /** Check if a remote AI API key is configured. */
+    private suspend fun isRemoteConfigured(): Boolean {
+        return preferences.hasAiApiKey() && preferences.getAiProvider() != "aicore"
+    }
+
+    /** Get the remote provider config for API calls. */
+    private suspend fun remoteProvider(): String? {
+        val p = preferences.getAiProvider()
+        return if (p != "aicore") p else null
+    }
+
+    /** Try remote AI. Returns null if not configured, offline, or request fails. */
+    private suspend fun tryRemoteVision(imageBitmap: Bitmap, prompt: String): String? {
+        if (!isRemoteConfigured() || !remoteAiService.isOnline()) return null
+        val provider = preferences.getAiProvider()
+        val key = preferences.getAiApiKey()
+        val model = preferences.getAiModel()
+        val customUrl = preferences.getAiCustomUrl()
+        if (key.isBlank()) return null
+        return remoteAiService.sendVisionRequest(provider, key, model, imageBitmap, prompt, customUrl)
+    }
+
+    /** Try remote AI text-only. Returns null if not configured, offline, or fails. */
+    private suspend fun tryRemoteText(prompt: String): String? {
+        if (!isRemoteConfigured() || !remoteAiService.isOnline()) return null
+        val provider = preferences.getAiProvider()
+        val key = preferences.getAiApiKey()
+        val model = preferences.getAiModel()
+        val customUrl = preferences.getAiCustomUrl()
+        if (key.isBlank()) return null
+        return remoteAiService.sendTextRequest(provider, key, model, prompt, customUrl)
+    }
+
+
+    /**
+     * Parse remote AI JSON response into OcrResult.
+     */
+    private fun parseJsonToOcrResult(jsonStr: String, currency: String): OcrResult? {
+        return try {
+            val jsonObj = json.parseToJsonElement(jsonStr).jsonObject
+            val items = jsonObj["items"]?.jsonArray?.map {
+                val i = it.jsonObject
+                OcrLineItem(
+                    description = i["description"]?.jsonPrimitive?.content ?: "",
+                    quantity = i["quantity"]?.jsonPrimitive?.doubleOrNull ?: 1.0,
+                    unitPrice = i["unitPrice"]?.jsonPrimitive?.doubleOrNull ?: 0.0,
+                    total = i["total"]?.jsonPrimitive?.doubleOrNull ?: 0.0
+                )
+            } ?: emptyList()
+            OcrResult(
+                merchant = jsonObj["merchant"]?.jsonPrimitive?.content ?: "Unknown",
+                date = jsonObj["date"]?.jsonPrimitive?.content ?: "",
+                total = jsonObj["total"]?.jsonPrimitive?.doubleOrNull ?: 0.0,
+                taxAmount = jsonObj["taxAmount"]?.jsonPrimitive?.doubleOrNull ?: 0.0,
+                currency = jsonObj["currency"]?.jsonPrimitive?.content ?: currency,
+                category = jsonObj["category"]?.jsonPrimitive?.content ?: "General",
+                items = items,
+                rawText = "",
+                confidence = 0.9
+            )
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+
+    /**
+     * Parse remote AI JSON response into PaySlipResult.
+     */
+    private fun parseJsonToPaySlipResult(jsonStr: String): PaySlipResult? {
+        return try {
+            val jsonObj = json.parseToJsonElement(jsonStr).jsonObject
+            val employer = jsonObj.stringValue("employer", "source", "payer", "company", "description")
+            val netPayFromText = jsonObj.amountTextValue(
+                "netPayText", "net pay text", "amountText", "amount text", "rawAmount", "raw amount"
+            )
+            val netPayFromNumber = jsonObj.amountValue(
+                "netPay", "net_pay", "net pay", "takeHomePay", "take home pay",
+                "amount paid", "paid to employee", "transactionAmount", "transaction amount",
+                "creditAmount", "credit amount", "depositAmount", "deposit amount",
+                "amount", "credit"
+            )?.let { kotlin.math.abs(it) }
+            val netPay = netPayFromText ?: netPayFromNumber ?: 0.0
+            val date = jsonObj.stringValue("date", "transactionDate", "transaction date", "payDate", "pay date")
+                .ifBlank { com.fmz.spenitaicore.util.DateUtils.today() }
+            val category = jsonObj.stringValue("category", "incomeCategory", "income category").ifBlank { "Salary" }
+            val notes = jsonObj.stringValue("notes", "note", "reason").ifBlank { null }
+            PaySlipResult(employer = employer, netPay = netPay, date = date, category = category, notes = notes)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /** Try remote AI for bank statement extraction across multiple pages. */
+    private suspend fun tryRemoteBankStatement(bitmaps: List<Bitmap>): BankStatementResult? {
+        if (!isRemoteConfigured() || !remoteAiService.isOnline()) {
+            Log.d(TAG, "Remote AI not configured or offline, skipping bank statement remote path")
+            return null
+        }
+        val provider = preferences.getAiProvider()
+        val key = preferences.getAiApiKey()
+        val model = preferences.getAiModel()
+        val customUrl = preferences.getAiCustomUrl()
+        if (key.isBlank()) return null
+
+        val prompt = """You are a bank statement parser. Extract all transaction data from this bank statement page.
+Return ONLY valid JSON with no markdown, no explanation, no extra text.
+
+Extract ALL transaction rows. Each transaction should have: date (YYYY-MM-DD), description, amount (positive for credit, negative for debit), type ("credit" or "debit").
+
+Handle these date formats:
+- DD/MM/YY or DD/MM/YYYY
+- D MMM YYYY or DD MMM YYYY (e.g., "1 Mar 2026")
+- DD Mon or D Mon (day + abbreviated month, infer year from statement period)
+- DDMmmYYYY (no separators, e.g., "27Mar2026")
+
+Skip: balance rows, summary rows, column headers, daily interest below RM 1.00, internal pocket transfers.
+
+Return format only (strict JSON, no markdown):
+{
+  "bankName": "Bank Name",
+  "accountLast4": "1234",
+  "period": "Mar 2026",
+  "transactions": [
+    {"date":"2026-03-01","description":"Something","amount":-69.00,"type":"debit"}
+  ]
+}
+"""
+
+        val allTransactions = mutableListOf<BankTransaction>()
+        var bankName = ""
+        var accountLast4 = ""
+        var period = ""
+
+        for ((index, bitmap) in bitmaps.withIndex()) {
+            Log.d(TAG, "Remote AI bank statement page ${index + 1}/${bitmaps.size}")
+            val response = remoteAiService.sendVisionRequest(provider, key, model, bitmap, prompt, customUrl)
+            if (response == null) {
+                Log.w(TAG, "Remote AI returned null for page ${index + 1}")
+                continue
+            }
+            Log.d(TAG, "Remote AI page ${index + 1} response: ${response.take(300)}")
+
+            try {
+                val root = json.parseToJsonElement(response).jsonObject
+                val transactions = root.arrayValue("transactions", "transaction", "entries", "rows", "items", "statementLines")
+                if (transactions != null) {
+                    allTransactions += transactions.mapNotNull { (it as? JsonObject)?.toBankTransaction() }
+                        .filter { it.amount != 0.0 }
+                }
+                if (bankName.isEmpty()) bankName = root.stringValue("bankName", "bank name", "bank")
+                if (accountLast4.isEmpty()) accountLast4 = root.stringValue("accountLast4", "account last 4", "accountNumber", "account number")
+                if (period.isEmpty()) period = root.stringValue("period", "statementPeriod", "statement period")
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to parse remote AI page ${index + 1}", e)
+            }
+        }
+
+        if (allTransactions.isEmpty()) return null
+
+        val deduped = allTransactions.distinctBy { "${it.date}|${it.amount}|${it.description.take(40)}" }
+        Log.d(TAG, "Remote AI total: ${deduped.size} transactions (${allTransactions.size} raw)")
+        return BankStatementResult(bankName = bankName, accountLast4 = accountLast4, period = period, transactions = deduped)
+    }
+
     companion object {
         private const val AICORE_PACKAGE = "com.google.android.aicore"
         private const val AICORE_PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=$AICORE_PACKAGE"
+        private const val TAG = "AiCoreService"
+
+        private const val CLASSIFY_PROMPT = """Analyze this financial document image and classify it into exactly one type.
+Valid types are: "income", "expense", or "bankstatement".
+
+Rules:
+1. "income": income document, salary statement, wage statement, employer payment advice, income proof.
+2. "expense": expense receipt, invoice, bill, purchase receipt, tax receipt.
+3. "bankstatement": bank account statement or transaction list with multiple credits/debits/balances.
+4. If the document shows a single primary amount with a leading sign, use the sign: "+" means "income", "-" means "expense".
+   If no leading sign, assume "expense" unless clearly a bank statement.
+
+Return ONLY a JSON object: {"type":"income"}
+"""
 
         fun isAiCoreAvailable(context: Context): Boolean {
             return try {
@@ -91,24 +274,34 @@ class AiCoreService(
     private val inferenceMutex = Mutex()
 
     suspend fun classifyFinancialDocument(imagePath: String): FinancialDocumentType {
-        Log.d("AiCoreService", "Starting document classification for: $imagePath")
+        Log.d(TAG, "Starting document classification for: $imagePath")
         return try {
             val bitmap = loadBitmapFromPath(imagePath) ?: return FinancialDocumentType.Unknown
+
+            // ── Remote provider path (configured + online) ────────────────
+            val remoteResult = tryRemoteVision(bitmap, CLASSIFY_PROMPT)
+            if (remoteResult != null) {
+                Log.d(TAG, "Remote classify result: ${remoteResult.take(200)}")
+                val jsonObj = parseFirstJsonObject(remoteResult)
+                val type = jsonObj?.stringValue("type", "documentType", "document_type")
+                    ?.normalizedDocumentType()
+                val result = when (type) {
+                    "income" -> FinancialDocumentType.Income
+                    "expense" -> FinancialDocumentType.Expense
+                    "bankstatement" -> FinancialDocumentType.BankStatement
+                    else -> FinancialDocumentType.Unknown
+                }
+                if (result != FinancialDocumentType.Unknown) {
+                    Log.d(TAG, "Remote classify: $result")
+                    return result
+                }
+                // If remote returned unknown, fall through to AICore
+            }
+
+            // ── AICore fallback ──────────────────────────────────────────
             val model = getAvailableModel().model ?: return FinancialDocumentType.Unknown
 
-            val prompt = """
-                Analyze this financial document image and classify it into exactly one type.
-                Valid types are: "income", "expense", or "bankstatement".
-
-                Rules:
-                1. "income": income document, salary statement, wage statement, employer payment advice, income proof. Choose this ONLY when it is primarily an income document, not a general bank statement.
-                2. "expense": expense receipt, invoice, bill, purchase receipt, tax receipt. Choose this ONLY when it is primarily a merchant expense/invoice/bill.
-                3. "bankstatement": bank account statement or transaction list with multiple credits/debits/balances. Choose this when the document shows account balances, transaction rows, debit/credit columns, or a statement period.
-                4. If the document shows a single primary amount with a leading sign, use the sign to classify it: "+" means "income", "-" means "expense". If the primary amount has no leading sign, assume it is an "expense" unless the document is clearly a bank statement.
-
-                Return ONLY a JSON object in this exact format with no extra text or markdown:
-                {"type":"income"}
-            """.trimIndent()
+            val prompt = CLASSIFY_PROMPT
 
             val request = GenerateContentRequest.Builder(
                 ImagePart(bitmap),
@@ -126,7 +319,7 @@ class AiCoreService(
                 else -> FinancialDocumentType.Unknown
             }
         } catch (e: Exception) {
-            Log.e("AiCoreService", "Document classification error", e)
+            Log.e(TAG, "Document classification error", e)
             FinancialDocumentType.Unknown
         }
     }
@@ -135,16 +328,44 @@ class AiCoreService(
         imagePath: String,
         currency: String
     ): OcrResult? {
-        Log.d("AiCoreService", "Starting expense extraction for: $imagePath")
+        Log.d(TAG, "Starting expense extraction for: $imagePath")
         return try {
             val bitmap = loadBitmapFromPath(imagePath) ?: return null
+
+            // ── Remote provider path ──────────────────────────────────
+            val prompt = """Analyze this expense document image and extract the following information.
+Rules:
+1. merchant: The name of the store or business.
+2. date: Transaction date in YYYY-MM-DD format.
+   IMPORTANT - Handle date format ambiguity:
+   - Expense documents usually show day first (DD/MM/YYYY or DD-MM-YYYY), especially outside US
+   - Look at the date: if day value > 12, it's definitely DD/MM format
+   - If month value > 12, it's definitely MM/DD format
+   - Textual dates like "15 Jan 2025" or "Jan 15, 2025" are unambiguous - use the text
+   - When ambiguous (both day and month ≤ 12), prefer DD/MM/YYYY for non-US expense documents
+   - Examples: "15/03/2025" → "2025-03-15", "03/15/2025" (US) → "2025-03-15", "01/02/2025" → prefer "2025-02-01"
+3. total: The total amount paid as a number.
+4. tax: The tax amount as a number.
+5. category: Best match from this list: [${ExpensesViewModel.SPENDING_CATEGORIES.joinToString(", ")}].
+
+Return ONLY a valid JSON object in exactly this format, with no markdown formatting and no extra text:
+{"merchant":"...","date":"...","total":0.0,"currency":"$currency","category":"General","taxAmount":0.0}
+"""
+
+            val remoteResult = tryRemoteVision(bitmap, prompt)
+            if (remoteResult != null) {
+                Log.d(TAG, "Remote expense result: ${remoteResult.take(300)}")
+            val parsedOcr = parseJsonToOcrResult(remoteResult, currency)
+            if (parsedOcr != null) { Log.d(TAG, "Remote expense parse OK"); return parsedOcr }
+            }
+
+            // ── AICore fallback ──────────────────────────────────────
             val model = getAvailableModel().model ?: return null
 
-            val prompt = """
-                Analyze this expense document image and extract the following information.
-                Rules:
-                1. merchant: The name of the store or business.
-                2. date: Transaction date in YYYY-MM-DD format.
+            val aicorePrompt = """Analyze this expense document image and extract the following information.
+Rules:
+1. merchant: The name of the store or business.
+2. date: Transaction date in YYYY-MM-DD format.
                    IMPORTANT - Handle date format ambiguity:
                    - Expense documents usually show day first (DD/MM/YYYY or DD-MM-YYYY), especially outside US
                    - Look at the date: if day value > 12, it's definitely DD/MM format
@@ -162,7 +383,7 @@ class AiCoreService(
 
             val request = GenerateContentRequest.Builder(
                 ImagePart(bitmap),
-                TextPart(prompt)
+                TextPart(aicorePrompt)
             ).build()
 
             val response = inferenceMutex.withLock { model.generateContent(request) }
@@ -298,6 +519,16 @@ class AiCoreService(
             return BankStatementResult(errorMessage = "Could not load image. File may be unsupported or corrupted.")
         }
 
+        // ── Remote AI path (if API key configured + online) ─────────────
+        val remoteResult = tryRemoteBankStatement(bitmaps)
+        if (remoteResult != null) {
+            Log.d(TAG, "Remote AI returned ${remoteResult.transactions.size} transactions for bank statement")
+            if (remoteResult.transactions.size >= 3) {
+                return remoteResult
+            }
+            // If remote found too few, fall through to OCR
+        }
+
         // ── Primary path: ML Kit OCR + regex parser (fast, no AICore quota) ────
         val textTransactions = mutableListOf<BankTransaction>()
         for ((index, bitmap) in bitmaps.withIndex()) {
@@ -372,75 +603,129 @@ class AiCoreService(
         return try {
             val prompt = """
                 You are a bank statement parser. Extract all transaction data from this bank statement page.
+                This page may be a scanned PDF, image, or text PDF.
                 Return ONLY valid JSON with no markdown, no explanation, no extra text.
 
                 STEP 1 — BANK METADATA (from header/logo area only):
                 - bankName: Full bank name from logo or header text.
-                  Known banks: Maybank, Maybank Islamic, CIMB Bank, Public Bank, HSBC, HSBC Amanah,
+                  Known Malaysian banks: Maybank, Maybank Islamic, CIMB Bank, Public Bank, HSBC, HSBC Amanah,
                   Standard Chartered, OCBC, DBS, UOB, RHB, Hong Leong Bank, Affin Bank, Alliance Bank,
                   AmBank, Bank Rakyat, Bank Islam, BSN, Citibank, Ryt Bank, YTL Digital Bank,
-                  Bank Muamalat, Bank Simpanan Nasional
+                  Bank Muamalat, Bank Simpanan Nasional, UOB Malaysia, GX Bank, GX Bank Berhad
                 - accountLast4: Last 4 digits of the primary account number shown.
-                  Examples: "162236-564519" → "4519"; "85 4480 3271" → "3271"; "001-169473-108" → "3108" is wrong → use "9108" or last 4 of the actual account part
-                  For account "001-169473-108": last segment is "108" which is only 3 digits — use last 4 of full number → "3108" is wrong, just take last 4 chars of "001169473108" → "3108". Actually extract the last 4 digits of the full account number string ignoring dashes and spaces.
-                - period: Statement period. Examples: "Mar 2026", "Apr 2026", "01/03/2026 - 31/03/2026", "1 Apr 2026 to 30 Apr 2026"
+                  Account examples:
+                  "162236-564519" → last 4 of full string "162236564519" → "4519"
+                  "85 4480 3271" → "3271"
+                  "001-169473-108" → last 4 of "001169473108" → "3108"
+                  "916-329-481-4" → last 4 of "9163294814" → "4814"
+                  Remove dashes and spaces first, then take the last 4 characters that are digits.
+                - period: Statement period as seen in header. Examples: "Mar 2026", "01/03/2026 - 31/03/2026",
+                  "01 Mar 2026 to 31 Mar 2026", "1 Mar 2026 to 31 Mar 2026", "From 1 Mar 2026 to 31 Mar 2026"
 
                 STEP 2 — DATE PARSING (ALL dates must be output as YYYY-MM-DD):
 
-                Handle ALL of these formats:
+                Handle ALL of these Malaysian bank statement formats:
                 a) DD/MM/YY or DD/MM/YYYY → "01/03/26" = 2026-03-01, "15/03/2026" = 2026-03-15
-                b) DDMmmYYYY (no separators) → "27Mar2026" = 2026-03-27, "01Apr2026" = 2026-04-01, "29Mar2026" = 2026-03-29
-                c) D MMM YYYY or DD MMM YYYY → "1 Apr 2026" = 2026-04-01, "27 Apr 2026" = 2026-04-27
-                d) MMM DD YYYY or MMM D YYYY → "Apr 1 2026" = 2026-04-01
-                e) YYYY-MM-DD → keep as-is
-                f) 2-digit year: 00–99 → 2000–2099 (e.g., "26" → "2026")
+                b) DDMmmYYYY (no separators) → "27Mar2026" = 2026-03-27, "01Apr2026" = 2026-04-01
+                c) D MMM YYYY or DD MMM YYYY → "1 Mar 2026" = 2026-03-01, "31 Mar 2026" = 2026-03-31
+                d) DD Mon or D Mon (day + abbreviated month, year is from statement period) →
+                   "01 Mar" means March 1 of the statement period year, "28 Feb" means Feb 28 of that year
+                   This format is used by UOB Malaysia — infer the year from the statement period header
+                e) MMM DD YYYY or MMM D YYYY → "Apr 1 2026" = 2026-04-01
+                f) YYYY-MM-DD → keep as-is
+                g) 2-digit year: 00–99 → 2000–2099 (e.g., "26" → "2026")
 
                 Month abbreviation map: Jan=01 Feb=02 Mar=03 Apr=04 May=05 Jun=06 Jul=07 Aug=08 Sep=09 Oct=10 Nov=11 Dec=12
 
                 If a transaction row has no date (continuation of previous row), carry forward the last seen date.
-                If year is absent, use the year from the statement period header.
+                If year is absent and a day+month pattern is found (e.g., "01 Mar"), use the year from the statement period header.
 
                 STEP 3 — SKIP NON-TRANSACTION ROWS:
                 Do NOT include any of these as transactions:
-                - Balance rows: "Opening balance", "Closing balance", "Beginning balance", "Ending balance", "Balance brought forward", "Balance carried forward"
-                - Summary rows: "Total credit", "Total debit", "Total transactions", "Transaction turnover", "Transaction count", "Ending balance", "ENDING BALANCE", "BEGINNING BALANCE"
-                - Column headers or section dividers
-                - Account summary sections (e.g., "Your Portfolio at a Glance", "Summary of Your Portfolio")
+                - Balance rows: "Opening balance", "Closing balance", "Beginning balance", "Ending balance",
+                  "Balance brought forward", "Balance carried forward", "BALANCE B/F", "CLOSING BALANCE",
+                  "BALANCE C/F", "OPENING BALANCE", "BEGINNING BALANCE", "ENDING BALANCE"
+                - Summary rows: "Total credit", "Total debit", "Total transactions", "Transaction turnover",
+                  "Transaction count", "TOTAL CREDIT", "TOTAL DEBIT"
+                - Column headers or section dividers (e.g., "URUSNIAGA AKAUN", "ACCOUNT TRANSACTIONS",
+                  "Tarikh Transaksi", "Butiran Transaksi Akaun", "Account Transaction Details")
+                - Account summary sections (e.g., "Your Portfolio at a Glance", "Summary of Your Portfolio",
+                  "Gambaran Keseluruhan Akaun", "Account Overview")
                 - Page totals or sub-totals without a specific transaction date
+                - Daily interest payouts below RM 1.00 (e.g., "+0.05", "+0.02" — Ryt Bank daily interest)
+                - Internal money movements between account pockets (e.g., "From Ryt Pocket", "To Ryt Pocket",
+                  "Money movement" — these are not real income/expenses)
+                - Balance entries that are just continuations or recurring labels
 
                 STEP 4 — AMOUNT EXTRACTION:
 
-                Layout A — Separate Deposits/Withdrawals or Credit/Debit columns (e.g., HSBC Amanah):
-                - Amount in Deposits or Credit column → positive number, type="credit"
-                - Amount in Withdrawals or Debit column → positive number stored as negative, type="debit"
-                - Ignore the "Balance" column entirely
+                Identify the layout type from the page and extract accordingly:
 
-                Layout B — Single amount column with trailing sign (e.g., Maybank M2U):
+                Layout A — Separate Deposits/Withdrawals or Credit/Debit columns (HSBC Amanah, UOB Malaysia, GX Bank):
+                 - Amount in Deposits or Credit column → positive number, type="credit"
+                 - Amount in Withdrawals or Debit column → positive number stored as negative, type="debit"
+                 - Ignore the "Balance" column entirely
+                 - For UOB: the columns are "Deposit/Deposits" and "Pengeluaran/Withdrawals"
+                 - For HSBC: columns are "Deposits" and "Withdrawals", balance has DR suffix
+                 - For GX Bank: columns are "Money in" and "Money out" with a separate "Interest earned" column
+                   - Interest earned from the "Interest earned" column → tiny amounts, SKIP them (already skipped in Step 3)
+                   - GX Bank account format: "8888-00135452-1" → accountLast4 = "4521" (last 4 digits of "8888001354521")
+
+                Layout B — Single amount column with trailing sign (Maybank M2U / Maybank Islamic):
                 - "300.00+" or "1,309.00+" → positive, type="credit"
                 - "69.00-" or "200.00-" → negative, type="debit"
+                - The amount column is the column BEFORE the balance column
+                - Note: Maybank has Chinese text headers too
 
-                Layout C — Single amount column with leading sign or +/- prefix (e.g., Ryt Bank):
-                - "+1,280.00" or no sign with "From …" description → positive, type="credit"
-                - "-30.00" or no sign with "To …" description → negative, type="debit"
+                Layout C — Single amount column with leading sign (+/- prefix) (Ryt Bank / YTL Digital Bank):
+                - "+1,280.00" or starting with "+" → positive, type="credit"
+                - "-30.00" or starting with "-" → negative, type="debit"
+                - Ryt Bank shows daily interest payouts (+0.01..+0.08) — SKIP these per Step 3
+                - Ryt Bank shows Ref. IDs — strip them from descriptions
 
                 Layout D — CR/DR suffix: "1,309.00 CR" → credit, "100.00 DR" → debit
+
+                Layout E — Three-column with +/- prefix (Maybank Islamic savings):
+                - First column: "SALE DEBIT" or "IBK FUND TFR TO A/C" etc. — this is the transaction TYPE label
+                - Second column: the amount with trailing +/- sign
+                - Third column: statement balance
+                - The transaction description continues on sub-lines below the date row
+                - IMPORTANT: Combine all sub-lines into one description
 
                 Amount formatting rules:
                 - Thousand separator comma: "1,234.56" → 1234.56
                 - Bracket negatives: "(100.00)" → -100.00
                 - Strip currency symbols (RM, MYR, $, etc.)
                 - The running balance / statement balance column is NOT a transaction amount — ignore it
+                - Amount may be in a column labeled "JUMLAH URUSNIAGA" (Maybank) or "Amaun" (Ryt/UOB)
+                - For scanned PDFs: OCR may produce messy amounts — use best judgment
 
-                STEP 5 — DESCRIPTION:
-                - Combine all text lines belonging to one transaction into a single string separated by spaces.
-                - For HSBC-style statements: merge all detail lines under a single date entry.
-                - For Maybank: include the main description line and sub-lines (e.g., merchant name, location, method).
-                - For Ryt Bank: include the full description including "To/From" prefix and transfer type.
-                - Remove redundant reference IDs only if they make the description unreadably long.
+                STEP 5 — DESCRIPTION CLEANING:
+                - Combine all text lines belonging to one transaction into a single string.
+                - For HSBC: merge all detail lines (REF IDs, merchant, location) into one clear description
+                - For Maybank M2U: include the main description line (e.g., "SALE DEBIT") and sub-lines
+                  (merchant name marked with *, location, method) as one description
+                - For Ryt Bank: include the full description including "To/From" prefix and transfer type
+                - For UOB: the description may span multiple columns — combine all text between date and amount
+                - IMPORTANT — REMOVE these from descriptions (they add no value):
+                  - "Ref. ID:" and the ref ID code
+                  - "Transaction date:" and the date
+                  - Card number patterns like "Card ••9700" or "Card ####"
+                  - Reference numbers like "MYR0000000000003255", "REF XXXXX-XXXXX"
+                  - "HIB-", "LP -", "DW -" prefixes
+                  - "EREF", "REMI", "REF ZAFA-xxxxx" patterns
+                - Keep: merchant names, "SALE DEBIT", "PAYMENT VIA MYDEBIT", "IBK FUND TFR",
+                  "TRANSFER FROM A/C", "FUND TRANSFER TO A/", "CMS-DIRECT DEBIT",
+                  "ATM Cash-out", "CR Card Pymt", "DuitNow/Instant Trf", "JomPAY",
+                  "Salary", "Bonus Interest", "Interest Credit"
 
                 STEP 6 — TRANSACTION TYPE RULES:
-                - type="credit": deposits, salary/income, refunds, incoming transfers, interest earned, government credits, tax refunds
-                - type="debit": withdrawals, purchases, payments, outgoing transfers, fees, ATM cash-out
+                - type="credit": deposits, salary/income, refunds, incoming transfers (IBK FUND TFR TO A/C,
+                  FUND TRANSFER TO A/, TRANSFER FROM A/C with positive amount), interest earned,
+                  government credits, tax refunds, CR Card Pymt (if shown as deposit)
+                - type="debit": withdrawals, purchases (SALE DEBIT, PAYMENT VIA MYDEBIT), payments,
+                  outgoing transfers (IBK FUND TFR FR A/C, TRANSFER FROM A/C with negative amount),
+                  fees, ATM cash-out, CMS-DIRECT DEBIT, PYMT FROM A/C, RPP REFUND TRANSFER (unless positive)
                 - If unclear, infer from sign: positive amount → credit, negative amount → debit
 
                 OUTPUT — strict JSON, no markdown fences:

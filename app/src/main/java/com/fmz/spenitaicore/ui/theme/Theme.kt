@@ -13,43 +13,52 @@ import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
 private val DarkColorScheme = darkColorScheme(
-    primary = BluePrimary,
-    onPrimary = OnBluePrimary,
-    primaryContainer = BluePrimaryDark,
-    secondary = CyanSecondary,
+    primary = IndigoLight,
+    onPrimary = Color.White,
+    primaryContainer = IndigoDark,
+    secondary = TealLight,
     onSecondary = Color.White,
-    secondaryContainer = CyanSecondaryDark,
-    background = DarkNavyBackground,
-    onBackground = OnDarkNavyBackground,
-    surface = DarkNavySurface,
-    onSurface = OnDarkNavySurface,
-    surfaceVariant = DarkNavySurfaceVariant,
-    surfaceContainerLow = DarkNavySurfaceContainer,
+    secondaryContainer = TealDark,
+    tertiary = RoseLight,
+    background = DarkBg,
+    onBackground = DarkOnBg,
+    surface = DarkSurface,
+    onSurface = DarkOnSurface,
+    surfaceVariant = DarkSurfaceVariant,
+    surfaceContainerLow = DarkContainer,
     error = ErrorRed,
     onError = Color.White,
-    outline = DarkNavySurfaceVariant,
+    outline = DarkOutline,
 )
 
 private val LightColorScheme = lightColorScheme(
-    primary = BluePrimary,
-    onPrimary = OnBluePrimary,
-    primaryContainer = BluePrimaryLight,
-    secondary = CyanSecondary,
+    primary = IndigoPrimary,
+    onPrimary = Color.White,
+    primaryContainer = IndigoContainer,
+    onPrimaryContainer = IndigoOnContainer,
+    secondary = TealSecondary,
     onSecondary = Color.White,
-    secondaryContainer = CyanSecondaryLight,
-    background = LightBackground,
-    onBackground = DarkNavyBackground,
+    secondaryContainer = TealContainer,
+    onSecondaryContainer = TealOnContainer,
+    tertiary = RoseTertiary,
+    onTertiary = Color.White,
+    tertiaryContainer = RoseContainer,
+    background = LightBg,
+    onBackground = LightOnBg,
     surface = LightSurface,
-    onSurface = DarkNavyBackground,
+    onSurface = LightOnSurface,
     surfaceVariant = LightSurfaceVariant,
+    surfaceContainerLow = LightContainer,
     error = ErrorRed,
-    outline = Color(0xFF79747E)
+    onError = Color.White,
+    errorContainer = ErrorContainer,
+    onErrorContainer = ErrorOnContainer,
+    outline = LightOutline,
 )
 
 @Composable
 fun SpenItTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
-    // Dynamic color is available on Android 12+
+    darkTheme: Boolean = false,
     dynamicColor: Boolean = true,
     content: @Composable () -> Unit
 ) {

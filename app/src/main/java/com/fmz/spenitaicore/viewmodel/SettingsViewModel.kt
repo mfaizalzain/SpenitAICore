@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fmz.spenitaicore.SpenItApp
+import com.fmz.spenitaicore.data.db.AppDatabase
 import com.fmz.spenitaicore.data.export.ExportService
 import com.fmz.spenitaicore.data.backup.BackupWorker
 import com.fmz.spenitaicore.data.backup.DriveBackupService
@@ -66,6 +67,38 @@ class SettingsViewModel : ViewModel() {
 
     val availablePayDays = (1..31).toList()
 
+    // ── AI Provider ───────────────────────────────────────────────────
+
+    private val _aiProvider = MutableStateFlow("aicore")
+    val aiProvider: StateFlow<String> = _aiProvider
+
+    private val _aiApiKey = MutableStateFlow("")
+    val aiApiKey: StateFlow<String> = _aiApiKey
+
+    private val _aiModel = MutableStateFlow("")
+    val aiModel: StateFlow<String> = _aiModel
+
+    private val _aiCustomUrl = MutableStateFlow("")
+    val aiCustomUrl: StateFlow<String> = _aiCustomUrl
+
+    private val _aiProviderError = MutableStateFlow<String?>(null)
+    val aiProviderError: StateFlow<String?> = _aiProviderError
+
+    val aiProviderNames = mapOf(
+        "aicore" to "On-device (AICore)",
+        "gemini" to "Google Gemini",
+        "openai" to "OpenAI",
+        "custom" to "Custom (OpenAI-compatible)"
+    )
+
+    val aiProviderKeys = listOf("aicore", "gemini", "openai", "custom")
+
+    val aiProviderModels = mapOf(
+        "gemini" to listOf("gemini-flash-lite-latest", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"),
+        "openai" to listOf("gpt-4o-mini", "gpt-4o", "gpt-4o-2024-08-06"),
+        "custom" to emptyList()
+    )
+
     init {
         loadSettings()
         loadTaxYears()
@@ -79,6 +112,10 @@ class SettingsViewModel : ViewModel() {
                 _selectedLanguageCode.value = preferences.getAppLanguage()
                 _salaryPayDay.value = preferences.getSalaryPayDay()
                 _isAppLockEnabled.value = preferences.getAppLockEnabled()
+                _aiProvider.value = preferences.getAiProvider()
+                _aiApiKey.value = preferences.getAiApiKey()
+                _aiModel.value = preferences.getAiModel()
+                _aiCustomUrl.value = preferences.getAiCustomUrl()
             } finally {
                 _isBusy.value = false
             }
@@ -114,6 +151,57 @@ class SettingsViewModel : ViewModel() {
         viewModelScope.launch {
             _isAppLockEnabled.value = enabled
             preferences.setAppLockEnabled(enabled)
+        }
+    }
+
+    // ── AI Provider ───────────────────────────────────────────────────
+
+    fun setAiProvider(provider: String) {
+        viewModelScope.launch {
+            _aiProvider.value = provider
+            preferences.setAiProvider(provider)
+            _aiProviderError.value = null
+            if (provider == "aicore") {
+                // Clear key when switching to on-device
+                _aiApiKey.value = ""
+                _aiModel.value = ""
+                _aiCustomUrl.value = ""
+                preferences.clearAiProvider()
+            }
+        }
+    }
+
+    fun saveAiApiKey(provider: String, apiKey: String, model: String, customUrl: String) {
+        viewModelScope.launch {
+            if (apiKey.isBlank()) {
+                _aiProviderError.value = "API key cannot be empty"
+                return@launch
+            }
+            // Basic validation
+            if (apiKey.length < 8) {
+                _aiProviderError.value = "API key seems too short"
+                return@launch
+            }
+            _aiApiKey.value = apiKey
+            _aiModel.value = model
+            _aiCustomUrl.value = customUrl
+            _aiProvider.value = provider
+            preferences.setAiProvider(provider)
+            preferences.setAiApiKey(apiKey)
+            preferences.setAiModel(model)
+            preferences.setAiCustomUrl(customUrl)
+            _aiProviderError.value = null
+        }
+    }
+
+    fun removeAiApiKey() {
+        viewModelScope.launch {
+            _aiApiKey.value = ""
+            _aiModel.value = ""
+            _aiCustomUrl.value = ""
+            _aiProvider.value = "aicore" // fall back to on-device
+            preferences.clearAiProvider()
+            _aiProviderError.value = null
         }
     }
 
@@ -298,16 +386,18 @@ class SettingsViewModel : ViewModel() {
     private suspend fun runManualBackup(account: Account) {
         withContext(Dispatchers.IO) {
             val context = SpenItApp.instance
-            val dbPath = context.getDatabasePath("spenit.db")
-            if (!dbPath.exists()) {
-                _backupError.value = "Database not found"
+            val zipFile = driveService.createBackupPackage()
+            if (zipFile == null) {
+                _backupError.value = "Failed to create backup package"
                 _isBackingUp.value = false
                 return@withContext
             }
             val dateStr = java.text.SimpleDateFormat("yyyy-MM-dd_HHmm", java.util.Locale.US)
                 .format(java.util.Date())
-            val fileName = "SpenIt_Backup_$dateStr.db"
-            val result = driveService.uploadBackup(account, dbPath, fileName)
+            val fileName = "SpenIt_Backup_$dateStr.zip"
+            val result = driveService.uploadBackup(account, zipFile, fileName)
+
+            zipFile.delete()
 
             _isBackingUp.value = false
             if (result.success) {
@@ -403,21 +493,21 @@ class SettingsViewModel : ViewModel() {
                 }
 
                 withContext(Dispatchers.IO) {
-                    // Close the database
-                    try {
-                        container.database.close()
-                    } catch (_: Exception) { }
+                    // Close and reset database so Room re-opens fresh
+                    AppDatabase.closeAndReset(SpenItApp.instance)
 
-                    // Replace database files
+                    // Delete old database files
                     val context = SpenItApp.instance
                     context.getDatabasePath("spenit.db").delete()
                     context.getDatabasePath("spenit.db-wal").delete()
                     context.getDatabasePath("spenit.db-shm").delete()
 
-                    downloadedFile.copyTo(
-                        context.getDatabasePath("spenit.db"),
-                        overwrite = true
-                    )
+                    // Extract ZIP (db + media files)
+                    val success = driveService.extractBackupPackage(downloadedFile)
+                    downloadedFile.delete()
+                    if (!success) {
+                        throw Exception("Failed to extract backup package")
+                    }
                 }
 
                 _selectedBackupForRestore.value = null
@@ -436,6 +526,37 @@ class SettingsViewModel : ViewModel() {
 
     fun clearRestoreError() {
         _restoreError.value = null
+    }
+
+    // ── Delete Account ─────────────────────────────────────────────
+
+    private val _deleteInProgress = MutableStateFlow(false)
+    val deleteInProgress: StateFlow<Boolean> = _deleteInProgress
+
+    private val _deleteCompleted = MutableStateFlow(false)
+    val deleteCompleted: StateFlow<Boolean> = _deleteCompleted
+
+    fun deleteAccount() {
+        viewModelScope.launch {
+            _deleteInProgress.value = true
+            try {
+                withContext(Dispatchers.IO) {
+                    receiptRepo.deleteAll()
+                    container.incomeRepository.deleteAll()
+                    container.database.userProfileDao().deleteAll()
+                    container.sharedImportStore.clear()
+                    preferences.clearAll()
+                    BackupWorker.cancel(SpenItApp.instance)
+                }
+                _deleteCompleted.value = true
+            } catch (e: Exception) {
+                // Even on error, try to restart fresh
+                _deleteCompleted.value = true
+            } finally {
+                _deleteInProgress.value = false
+                restartApp()
+            }
+        }
     }
 
     fun restartApp() {

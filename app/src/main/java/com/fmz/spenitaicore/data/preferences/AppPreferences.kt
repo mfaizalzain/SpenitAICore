@@ -26,6 +26,12 @@ class AppPreferences(private val context: Context) {
         val KEY_BACKUP_ENABLED = booleanPreferencesKey("backup_enabled")
         val KEY_BACKUP_ACCOUNT = stringPreferencesKey("backup_account")
         val KEY_LAST_BACKUP_TIME = longPreferencesKey("last_backup_time")
+
+        // AI Provider
+        val KEY_AI_PROVIDER = stringPreferencesKey("ai_provider")
+        val KEY_AI_API_KEY = stringPreferencesKey("ai_api_key")
+        val KEY_AI_MODEL = stringPreferencesKey("ai_model")
+        val KEY_AI_CUSTOM_URL = stringPreferencesKey("ai_custom_url")
     }
 
     val defaultCurrency: Flow<String> = context.dataStore.data.map { prefs ->
@@ -140,4 +146,50 @@ class AppPreferences(private val context: Context) {
 
     suspend fun getLastBackupTime(): Long =
         context.dataStore.data.first()[KEY_LAST_BACKUP_TIME] ?: 0L
+
+    // ── AI Provider ─────────────────────────────────────────────────
+
+    suspend fun getAiProvider(): String =
+        context.dataStore.data.first()[KEY_AI_PROVIDER] ?: "aicore"
+
+    suspend fun setAiProvider(provider: String) {
+        context.dataStore.edit { it[KEY_AI_PROVIDER] = provider }
+    }
+
+    suspend fun getAiApiKey(): String =
+        context.dataStore.data.first()[KEY_AI_API_KEY] ?: ""
+
+    suspend fun setAiApiKey(key: String) {
+        context.dataStore.edit { it[KEY_AI_API_KEY] = key }
+    }
+
+    suspend fun getAiModel(): String =
+        context.dataStore.data.first()[KEY_AI_MODEL] ?: ""
+
+    suspend fun setAiModel(model: String) {
+        context.dataStore.edit { it[KEY_AI_MODEL] = model }
+    }
+
+    suspend fun getAiCustomUrl(): String =
+        context.dataStore.data.first()[KEY_AI_CUSTOM_URL] ?: ""
+
+    suspend fun setAiCustomUrl(url: String) {
+        context.dataStore.edit { it[KEY_AI_CUSTOM_URL] = url }
+    }
+
+    suspend fun hasAiApiKey(): Boolean =
+        getAiApiKey().isNotBlank()
+
+    suspend fun clearAiProvider() {
+        context.dataStore.edit {
+            it.remove(KEY_AI_PROVIDER)
+            it.remove(KEY_AI_API_KEY)
+            it.remove(KEY_AI_MODEL)
+            it.remove(KEY_AI_CUSTOM_URL)
+        }
+    }
+
+    suspend fun clearAll() {
+        context.dataStore.edit { it.clear() }
+    }
 }

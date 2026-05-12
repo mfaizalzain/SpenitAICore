@@ -48,10 +48,9 @@ class SpenItApp : Application() {
     }
 }
 
-class AppContainer(context: Application) {
-    val database: AppDatabase by lazy {
-        AppDatabase.getInstance(context)
-    }
+class AppContainer(private val context: Application) {
+    val database: AppDatabase
+        get() = AppDatabase.getInstance(context)
 
     val preferences: AppPreferences by lazy {
         AppPreferences(context)

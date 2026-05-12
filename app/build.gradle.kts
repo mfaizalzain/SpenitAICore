@@ -13,8 +13,8 @@ android {
         applicationId = "com.fmz.spenitaicore"
         minSdk = 31
         targetSdk = 35
-        versionCode = 11
-        versionName = "1.0.8"
+        versionCode = 12
+        versionName = "1.0.9"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -150,6 +150,9 @@ dependencies {
 
     // AICore (Google's on-device AI with Gemini Nano via ML Kit)
     implementation("com.google.mlkit:genai-prompt:1.0.0-beta2")
+
+    // OkHttp for remote AI API calls
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
     // Debug
     debugImplementation("androidx.compose.ui:ui-tooling")

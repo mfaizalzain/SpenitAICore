@@ -44,4 +44,6 @@ class IncomeRepository(
     }
 
     suspend fun deleteIncomeEntry(entry: IncomeEntry) = incomeEntryDao.delete(entry)
+
+    suspend fun deleteAll() = incomeEntryDao.deleteAll()
 }

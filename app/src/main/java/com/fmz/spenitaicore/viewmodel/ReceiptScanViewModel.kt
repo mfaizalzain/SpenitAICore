@@ -71,6 +71,8 @@ class ReceiptScanViewModel(
 
     private var editReceiptId = 0
 
+    val isEditing: Boolean get() = editReceiptId > 0
+
     init {
         initCurrency()
     }
@@ -246,6 +248,47 @@ class ReceiptScanViewModel(
 
                     receiptRepo.saveReceipt(receipt)
                 }
+            } finally {
+                _isBusy.value = false
+            }
+        }
+    }
+
+    fun convertToOppositeType(navigateBack: () -> Unit) {
+        viewModelScope.launch {
+            if (editReceiptId <= 0) return@launch
+            _isBusy.value = true
+            try {
+                if (isIncome) {
+                    // Convert income → expense
+                    incomeRepo.deleteIncomeEntry(
+                        com.fmz.spenitaicore.data.db.entity.IncomeEntry(id = editReceiptId)
+                    )
+                    val receipt = Receipt(
+                        merchant = _merchant.value,
+                        date = _date.value,
+                        total = _total.value,
+                        currency = _currency.value,
+                        category = _category.value,
+                        imagePath = _imagePath.value,
+                        notes = _notes.value?.trim()?.ifBlank { null }
+                    )
+                    receiptRepo.saveReceipt(receipt)
+                } else {
+                    // Convert expense → income
+                    receiptRepo.deleteReceipt(Receipt(id = editReceiptId))
+                    val entry = com.fmz.spenitaicore.data.db.entity.IncomeEntry(
+                        source = _merchant.value,
+                        amount = _total.value,
+                        currency = _currency.value,
+                        date = _date.value,
+                        notes = _notes.value?.trim()?.ifBlank { null },
+                        category = _category.value,
+                        imagePath = _imagePath.value
+                    )
+                    incomeRepo.saveIncomeEntry(entry)
+                }
+                navigateBack()
             } finally {
                 _isBusy.value = false
             }

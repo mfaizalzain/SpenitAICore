@@ -32,6 +32,9 @@ fun IncomeScreen(
     sharedImportCount: Int = 0
 ) {
     val incomeEntries by viewModel.incomeEntries.collectAsStateWithLifecycle()
+    val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
+    val selectedCategory by viewModel.selectedCategory.collectAsStateWithLifecycle()
+    val totalText by viewModel.totalText.collectAsStateWithLifecycle()
     val totalThisMonthText by viewModel.totalThisMonthText.collectAsStateWithLifecycle()
     val netText by viewModel.netText.collectAsStateWithLifecycle()
     val selectedPeriod by viewModel.selectedPeriod.collectAsStateWithLifecycle()
@@ -40,6 +43,10 @@ fun IncomeScreen(
     val editingEntry by viewModel.editingEntry.collectAsStateWithLifecycle()
     val selectedEntry by viewModel.selectedEntry.collectAsStateWithLifecycle()
     val isRefreshing by viewModel.isRefreshing.collectAsStateWithLifecycle()
+    val isBusy by viewModel.isBusy.collectAsStateWithLifecycle()
+
+    var showCategoryDropdown by remember { mutableStateOf(false) }
+    var showPeriodDropdown by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         viewModel.quietLoad()
@@ -76,7 +83,7 @@ fun IncomeScreen(
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp),
+                    .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 12.dp),
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.primaryContainer
                 ),
@@ -99,31 +106,66 @@ fun IncomeScreen(
                 }
             }
 
-            // Period filter
+            // Search bar
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { viewModel.onSearchQueryChanged(it) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
+                placeholder = { Text("Search income... (#salary, >500, jan-mar)") },
+                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+                trailingIcon = {
+                    if (searchQuery.isNotEmpty()) {
+                        IconButton(onClick = {
+                            viewModel.onSearchQueryChanged("")
+                        }) {
+                            Icon(Icons.Filled.Close, contentDescription = "Clear")
+                        }
+                    } else {
+                        IconButton(onClick = { viewModel.applySearchFilters() }) {
+                            Icon(Icons.Filled.KeyboardArrowRight, contentDescription = "Search")
+                        }
+                    }
+                },
+                singleLine = true
+            )
+
+            // Filter row
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                var showPeriod by remember { mutableStateOf(false) }
+                // Period filter
                 FilterChip(
                     selected = true,
-                    onClick = { showPeriod = true },
-                    label = { Text(selectedPeriod) },
+                    onClick = { showPeriodDropdown = true },
+                    label = {
+                        val periods = listOf("Last30" to "Last 30 Days", "Last90" to "Last 90 Days",
+                            "ThisYear" to "This Year", "All" to "All Time")
+                        Text(periods.firstOrNull { it.first == selectedPeriod }?.second ?: selectedPeriod)
+                    },
                     trailingIcon = { Icon(Icons.Filled.ArrowDropDown, null, Modifier.size(18.dp)) }
                 )
-                DropdownMenu(expanded = showPeriod, onDismissRequest = { showPeriod = false }) {
-                    listOf("Last30" to "Last 30 Days", "Last90" to "Last 90 Days",
-                        "ThisYear" to "This Year", "All" to "All Time")
-                        .forEach { (value, label) ->
-                            DropdownMenuItem(
-                                text = { Text(label) },
-                                onClick = { viewModel.setPeriod(value); showPeriod = false }
-                            )
-                        }
-                }
+
+                // Category filter
+                FilterChip(
+                    selected = selectedCategory != "All",
+                    onClick = { showCategoryDropdown = true },
+                    label = { Text(selectedCategory) },
+                    trailingIcon = { Icon(Icons.Filled.ArrowDropDown, null, Modifier.size(18.dp)) }
+                )
             }
+
+            // Total header
+            Text(
+                text = "Total: $totalText",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+            )
 
             // List
             if (incomeEntries.isEmpty()) {
@@ -131,12 +173,12 @@ fun IncomeScreen(
                     modifier = Modifier.fillMaxSize().padding(32.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("No income entries", style = MaterialTheme.typography.bodyLarge,
+                    Text("No income entries found", style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             } else {
                 LazyColumn(
-                    contentPadding = PaddingValues(16.dp),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     items(incomeEntries, key = { it.id }) { entry ->
@@ -150,6 +192,47 @@ fun IncomeScreen(
                     item { Spacer(modifier = Modifier.height(72.dp)) }
                 }
             }
+        }
+    }
+
+    // Period dropdown
+    DropdownMenu(
+        expanded = showPeriodDropdown,
+        onDismissRequest = { showPeriodDropdown = false }
+    ) {
+        listOf("Last30" to "Last 30 Days", "Last90" to "Last 90 Days",
+            "ThisYear" to "This Year", "All" to "All Time")
+            .forEach { (value, label) ->
+                DropdownMenuItem(
+                    text = { Text(label) },
+                    onClick = {
+                        viewModel.setPeriod(value)
+                        showPeriodDropdown = false
+                    }
+                )
+            }
+    }
+
+    // Category dropdown
+    DropdownMenu(
+        expanded = showCategoryDropdown,
+        onDismissRequest = { showCategoryDropdown = false }
+    ) {
+        DropdownMenuItem(
+            text = { Text("All") },
+            onClick = {
+                viewModel.setCategory("All")
+                showCategoryDropdown = false
+            }
+        )
+        IncomeViewModel.INCOME_CATEGORIES.forEach { cat ->
+            DropdownMenuItem(
+                text = { Text(cat) },
+                onClick = {
+                    viewModel.setCategory(cat)
+                    showCategoryDropdown = false
+                }
+            )
         }
     }
 
@@ -313,39 +396,54 @@ fun IncomeScreen(
             // Actions row
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.SpaceEvenly
             ) {
-                Button(
-                    onClick = {
-                        selectedEntry?.let { viewModel.startEdit(it) }
-                    },
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer
-                    )
-                ) {
-                    Icon(Icons.Filled.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text("Edit")
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    IconButton(
+                        onClick = { selectedEntry?.let { viewModel.startEdit(it) } }
+                    ) {
+                        Icon(
+                            Icons.Filled.Edit, contentDescription = "Edit",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    Text("Edit", style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary)
                 }
 
-                Button(
-                    onClick = {
-                        selectedEntry?.let { 
-                            viewModel.deleteIncome(it)
-                            viewModel.dismissDetail()
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    IconButton(
+                        onClick = { selectedEntry?.let { viewModel.convertToExpense(it) } },
+                        enabled = !isBusy
+                    ) {
+                        Icon(
+                            Icons.Filled.SwapHoriz, contentDescription = "Convert to Expense",
+                            tint = MaterialTheme.colorScheme.secondary
+                        )
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    Text("Convert", style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.secondary)
+                }
+
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    IconButton(
+                        onClick = {
+                            selectedEntry?.let {
+                                viewModel.deleteIncome(it)
+                                viewModel.dismissDetail()
+                            }
                         }
-                    },
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer,
-                        contentColor = MaterialTheme.colorScheme.onErrorContainer
-                    )
-                ) {
-                    Icon(Icons.Filled.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text("Delete")
+                    ) {
+                        Icon(
+                            Icons.Filled.Delete, contentDescription = "Delete",
+                            tint = MaterialTheme.colorScheme.error
+                        )
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    Text("Delete", style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error)
                 }
             }
             Spacer(modifier = Modifier.height(24.dp))

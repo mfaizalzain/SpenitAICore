@@ -39,6 +39,7 @@ fun SharedImportsScreen(
     val isBusy by viewModel.isBusy.collectAsStateWithLifecycle()
     val navigateToEdit by viewModel.navigateToEdit.collectAsStateWithLifecycle()
     val unclassifiedCount = imports.count { it.kind == SharedImportKind.Unknown }
+    val processingCount = imports.count { it.status == SharedImportStatus.Processing || it.status == SharedImportStatus.InQueue }
 
     LaunchedEffect(imports.size) {
         onImportCountChanged(imports.size)
@@ -215,6 +216,46 @@ fun SharedImportsScreen(
                 }
             }
 
+            // Processing banner
+            if (processingCount > 0) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                        .padding(bottom = 2.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 10.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Column {
+                            Text(
+                                "Processing $processingCount file(s) — keep this page open",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                            Text(
+                                "Navigating away may interrupt the import",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                            )
+                        }
+                    }
+                }
+            }
+
             // Import list
             if (imports.isEmpty()) {
                 Box(
@@ -249,7 +290,8 @@ fun SharedImportsScreen(
                             onMarkExpense = { viewModel.setImportKind(item, SharedImportKind.ExpenseReceipt) },
                             onMarkIncome = { viewModel.setImportKind(item, SharedImportKind.Income) },
                             onMarkBank = { viewModel.setImportKind(item, SharedImportKind.BankStatement) },
-                            onViewCompleted = { viewModel.onCompletedItemClick(item) }
+                            onViewCompleted = { viewModel.onCompletedItemClick(item) },
+                            onShare = { viewModel.shareImportResult(item) }
                         )
                     }
                     item { Spacer(modifier = Modifier.height(16.dp)) }
@@ -268,7 +310,8 @@ fun ImportItemCard(
     onMarkExpense: () -> Unit,
     onMarkIncome: () -> Unit,
     onMarkBank: () -> Unit,
-    onViewCompleted: () -> Unit
+    onViewCompleted: () -> Unit,
+    onShare: () -> Unit
 ) {
     var showKindMenu by remember { mutableStateOf(false) }
 
@@ -356,8 +399,8 @@ fun ImportItemCard(
                     }
                 }
 
-                // Action buttons
-                Row {
+                // Action buttons — all consistently sized
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     if (item.canProcess) {
                         IconButton(onClick = onProcess, modifier = Modifier.size(36.dp)) {
                             Icon(Icons.Filled.PlayArrow, "Process")
@@ -369,9 +412,14 @@ fun ImportItemCard(
                         }
                     }
                     if (item.isCompleted) {
-                        Icon(Icons.Filled.OpenInNew, "View",
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp))
+                        IconButton(onClick = onViewCompleted, modifier = Modifier.size(36.dp)) {
+                            Icon(Icons.Filled.OpenInNew, "View",
+                                tint = MaterialTheme.colorScheme.primary)
+                        }
+                        IconButton(onClick = onShare, modifier = Modifier.size(36.dp)) {
+                            Icon(Icons.Filled.Share, "Share",
+                                tint = MaterialTheme.colorScheme.primary)
+                        }
                     }
                     IconButton(onClick = onRemove, modifier = Modifier.size(36.dp)) {
                         Icon(Icons.Filled.Delete, "Remove",

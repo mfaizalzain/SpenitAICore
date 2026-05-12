@@ -117,6 +117,14 @@ fun PaySlipScanScreen(
                     }
                 },
                 actions = {
+                    if (viewModel.isEditing) {
+                        TextButton(
+                            onClick = { viewModel.convertToOppositeType(onNavigateBack) },
+                            enabled = !isBusy
+                        ) {
+                            Text("Convert to Expense")
+                        }
+                    }
                     TextButton(
                         onClick = {
                             viewModel.saveReceipt()

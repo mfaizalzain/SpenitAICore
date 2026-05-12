@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.fmz.spenitaicore.SpenItApp
 import com.fmz.spenitaicore.data.db.entity.Receipt
 import com.fmz.spenitaicore.data.db.entity.ReceiptItem
+import com.fmz.spenitaicore.data.db.entity.IncomeEntry
 import com.fmz.spenitaicore.util.CurrencyFormatter
 import com.fmz.spenitaicore.util.DateUtils
 import kotlinx.coroutines.flow.*
@@ -14,6 +15,7 @@ class ExpensesViewModel : ViewModel() {
 
     private val container = SpenItApp.instance.container
     private val receiptRepo = container.receiptRepository
+    private val incomeRepo = container.incomeRepository
     private val preferences = container.preferences
 
     private var allReceipts = emptyList<Receipt>()
@@ -328,6 +330,28 @@ class ExpensesViewModel : ViewModel() {
         viewModelScope.launch {
             receiptRepo.deleteReceipt(receipt)
             loadData()
+        }
+    }
+
+    fun convertToIncome(receipt: Receipt) {
+        viewModelScope.launch {
+            _isBusy.value = true
+            try {
+                receiptRepo.deleteReceipt(receipt)
+                val entry = IncomeEntry(
+                    source = receipt.merchant,
+                    amount = receipt.total,
+                    currency = receipt.currency,
+                    date = receipt.date,
+                    notes = receipt.notes,
+                    category = "Other Income"
+                )
+                incomeRepo.saveIncomeEntry(entry)
+                dismissDetail()
+                loadData()
+            } finally {
+                _isBusy.value = false
+            }
         }
     }
 

@@ -1,6 +1,8 @@
 package com.fmz.spenitaicore.ui.settings
 
 import android.content.Intent
+import android.Manifest
+import android.content.pm.PackageManager
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -28,6 +30,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import android.os.Build
+import androidx.core.content.ContextCompat
 import com.fmz.spenitaicore.ui.components.CompactTopAppBar
 import com.fmz.spenitaicore.viewmodel.AuthViewModel
 import com.fmz.spenitaicore.viewmodel.SettingsViewModel
@@ -44,6 +48,28 @@ fun SettingsScreen(
     val isAppLockEnabled by viewModel.isAppLockEnabled.collectAsStateWithLifecycle()
     val isBusy by viewModel.isBusy.collectAsStateWithLifecycle()
     val authState by authViewModel.state.collectAsStateWithLifecycle()
+    val deleteInProgress by viewModel.deleteInProgress.collectAsStateWithLifecycle()
+
+    // ── AI Provider state ──────────────────────────────────
+    val aiProvider by viewModel.aiProvider.collectAsStateWithLifecycle()
+    val aiApiKey by viewModel.aiApiKey.collectAsStateWithLifecycle()
+    val aiModel by viewModel.aiModel.collectAsStateWithLifecycle()
+    val aiCustomUrl by viewModel.aiCustomUrl.collectAsStateWithLifecycle()
+    val aiProviderError by viewModel.aiProviderError.collectAsStateWithLifecycle()
+    val aiProviderNames = viewModel.aiProviderNames
+    val aiProviderKeys = viewModel.aiProviderKeys
+    val aiProviderModels = viewModel.aiProviderModels
+
+    var showDeleteConfirmDialog by remember { mutableStateOf(false) }
+
+    // ── AI Provider dialog state ────────────────────────────
+    var showAiProviderDialog by remember { mutableStateOf(false) }
+    var aiDialogProvider by remember { mutableStateOf("") }
+    var aiDialogKey by remember { mutableStateOf("") }
+    var aiDialogModel by remember { mutableStateOf("") }
+    var aiDialogCustomUrl by remember { mutableStateOf("") }
+    var showAiProviderDropdown by remember { mutableStateOf(false) }
+    var showAiModelDropdown by remember { mutableStateOf(false) }
 
     // ── Tax Export state ─────────────────────────────────────────
     val availableTaxYears by viewModel.availableTaxYears.collectAsStateWithLifecycle()
@@ -73,6 +99,18 @@ fun SettingsScreen(
     var showPayDayDropdown by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
+
+    val notificationPermGranted = remember {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
+                    PackageManager.PERMISSION_GRANTED
+        } else true
+    }
+    val notificationPermLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        // Re-composition via LiveData/State handles updates
+    }
 
     val googleSignInLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -302,6 +340,113 @@ fun SettingsScreen(
                 )
             }
 
+            // ── AI Provider section ───────────────────────────────────────────
+            item {
+                Divider(modifier = Modifier.padding(vertical = 8.dp))
+                Text("AI Provider", style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(vertical = 8.dp))
+            }
+
+            // AI Provider settings card
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surface
+                    )
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = if (aiApiKey.isNotEmpty()) Icons.Filled.CheckCircle else Icons.Filled.SmartToy,
+                                contentDescription = null,
+                                tint = if (aiApiKey.isNotEmpty()) MaterialTheme.colorScheme.primary
+                                       else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    aiProviderNames[aiProvider] ?: "On-device (AICore)",
+                                    fontWeight = FontWeight.SemiBold,
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                                Text(
+                                    if (aiApiKey.isNotEmpty()) "API key configured"
+                                    else "Free on-device AI · No key needed",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        if (aiProviderError != null) {
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                aiProviderError!!,
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+
+                        Spacer(Modifier.height(12.dp))
+
+                        if (aiApiKey.isNotEmpty() && aiProvider != "aicore") {
+                            // Show configured provider with remove option
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                OutlinedButton(
+                                    onClick = {
+                                        aiDialogProvider = aiProvider
+                                        aiDialogKey = aiApiKey
+                                        aiDialogModel = aiModel
+                                        aiDialogCustomUrl = aiCustomUrl
+                                        showAiProviderDialog = true
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Icon(Icons.Filled.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(Modifier.width(4.dp))
+                                    Text("Edit")
+                                }
+                                FilledTonalButton(
+                                    onClick = { viewModel.removeAiApiKey() },
+                                    colors = ButtonDefaults.filledTonalButtonColors(
+                                        containerColor = MaterialTheme.colorScheme.errorContainer,
+                                        contentColor = MaterialTheme.colorScheme.onErrorContainer
+                                    ),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Icon(Icons.Filled.Delete, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(Modifier.width(4.dp))
+                                    Text("Remove")
+                                }
+                            }
+                        } else if (aiProvider == "aicore") {
+                            // On-device — let user switch to a remote provider
+                            OutlinedButton(
+                                onClick = {
+                                    aiDialogProvider = "gemini"
+                                    aiDialogKey = ""
+                                    aiDialogModel = "gemini-flash-lite-latest"
+                                    aiDialogCustomUrl = ""
+                                    showAiProviderDialog = true
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("Add API Key")
+                            }
+                        }
+                    }
+                }
+            }
+
             // Tax Export section
             if (availableTaxYears.isNotEmpty()) {
                 item {
@@ -378,6 +523,62 @@ fun SettingsScreen(
                             Icon(Icons.Outlined.FileDownload, contentDescription = null)
                             Spacer(Modifier.width(8.dp))
                             Text("Export Tax Relief for $selectedTaxYear")
+                        }
+                    }
+                }
+            }
+
+            // Notification section
+            item {
+                Divider(modifier = Modifier.padding(vertical = 8.dp))
+                Text("Notifications", style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(vertical = 8.dp))
+            }
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surface
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Filled.Notifications,
+                            contentDescription = null,
+                            tint = if (notificationPermGranted) MaterialTheme.colorScheme.primary
+                                   else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Import & backup notifications",
+                                fontWeight = FontWeight.SemiBold,
+                                style = MaterialTheme.typography.bodyMedium)
+                            Text(
+                                if (notificationPermGranted) "Notifications are enabled"
+                                else "Allow notifications to get import and backup status alerts",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        if (!notificationPermGranted && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            FilledTonalButton(
+                                onClick = { notificationPermLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) }
+                            ) {
+                                Text("Allow")
+                            }
+                        } else if (notificationPermGranted) {
+                            Icon(Icons.Filled.CheckCircle,
+                                contentDescription = "Allowed",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp))
                         }
                     }
                 }
@@ -547,6 +748,20 @@ fun SettingsScreen(
             }
 
             item { Spacer(modifier = Modifier.height(32.dp)) }
+
+            // Delete Account
+            item {
+                Divider(modifier = Modifier.padding(vertical = 8.dp))
+            }
+            item {
+                Spacer(modifier = Modifier.height(4.dp))
+                SettingsItem(
+                    title = "Delete Account & Data",
+                    subtitle = "Permanently remove all your data",
+                    icon = Icons.Filled.Delete,
+                    onClick = { showDeleteConfirmDialog = true }
+                )
+            }
         }
     }
 
@@ -669,6 +884,193 @@ fun SettingsScreen(
     // Restore error (when not in the backup list dialog)
     if (restoreError != null && availableBackups.isEmpty() && !isLoadingBackups) {
         // Error already shown in the backup list dialog above
+    }
+
+
+    // ── AI Provider add/edit dialog ──────────────────
+    if (showAiProviderDialog) {
+        AlertDialog(
+            onDismissRequest = { showAiProviderDialog = false },
+            title = { Text(if (aiApiKey.isNotEmpty()) "Edit AI Provider" else "Add AI Provider") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // Provider selector
+                    Box {
+                        OutlinedTextField(
+                            value = aiDialogProvider.let { aiProviderNames[it] ?: it },
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Provider") },
+                            trailingIcon = { Icon(Icons.Filled.ArrowDropDown, null) },
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = aiApiKey.isEmpty()
+                        )
+                        Box(
+                            modifier = Modifier
+                                .matchParentSize()
+                                .clickable { showAiProviderDropdown = true }
+                        )
+                    }
+
+                    DropdownMenu(
+                        expanded = showAiProviderDropdown,
+                        onDismissRequest = { showAiProviderDropdown = false }
+                    ) {
+                        aiProviderKeys.forEach { key ->
+                            DropdownMenuItem(
+                                text = { Text(aiProviderNames[key] ?: key) },
+                                onClick = {
+                                    aiDialogProvider = key
+                                    aiDialogKey = ""
+                                    aiDialogModel = viewModel.aiProviderModels[key]?.firstOrNull() ?: ""
+                                    aiDialogCustomUrl = ""
+                                    showAiProviderDropdown = false
+                                },
+                                enabled = key != "aicore"
+                            )
+                        }
+                    }
+
+                    OutlinedTextField(
+                        value = aiDialogKey,
+                        onValueChange = { aiDialogKey = it },
+                        label = { Text("API Key") },
+                        placeholder = { Text("Enter your API key") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    if (aiDialogProvider != "custom") {
+                        val models = aiProviderModels[aiDialogProvider] ?: emptyList()
+                        if (models.isNotEmpty()) {
+                            Box {
+                                OutlinedTextField(
+                                    value = aiDialogModel,
+                                    onValueChange = {},
+                                    readOnly = true,
+                                    label = { Text("Model") },
+                                    trailingIcon = { Icon(Icons.Filled.ArrowDropDown, null) },
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                                Box(
+                                    modifier = Modifier
+                                        .matchParentSize()
+                                        .clickable { showAiModelDropdown = true }
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = showAiModelDropdown,
+                                onDismissRequest = { showAiModelDropdown = false }
+                            ) {
+                                models.forEach { model ->
+                                    DropdownMenuItem(
+                                        text = { Text(model) },
+                                        onClick = {
+                                            aiDialogModel = model
+                                            showAiModelDropdown = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    if (aiDialogProvider == "custom") {
+                        OutlinedTextField(
+                            value = aiDialogCustomUrl,
+                            onValueChange = { aiDialogCustomUrl = it },
+                            label = { Text("API Base URL") },
+                            placeholder = { Text("https://openrouter.ai/api") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            supportingText = {
+                                Text("The base URL of an OpenAI-compatible API endpoint")
+                            }
+                        )
+                        OutlinedTextField(
+                            value = aiDialogModel,
+                            onValueChange = { aiDialogModel = it },
+                            label = { Text("Model Name") },
+                            placeholder = { Text("openai/gpt-4o-mini") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+
+                    Text(
+                        "Your API key is stored securely on-device and never shared.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.saveAiApiKey(aiDialogProvider, aiDialogKey, aiDialogModel, aiDialogCustomUrl)
+                        showAiProviderDialog = false
+                    },
+                    enabled = aiDialogKey.isNotBlank() &&
+                              (aiDialogProvider != "custom" || aiDialogCustomUrl.isNotBlank()) &&
+                              aiDialogProvider != "aicore"
+                ) {
+                    Text("Save")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAiProviderDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // ── Delete Account confirmation ─────────────────────────────────
+
+    if (showDeleteConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirmDialog = false },
+            icon = { Icon(Icons.Filled.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+            title = { Text("Delete Account & Data") },
+            text = {
+                Text(
+                    "This will permanently delete all your expenses, income entries, and settings. " +
+                    "This action cannot be undone.",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showDeleteConfirmDialog = false
+                        viewModel.deleteAccount()
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error,
+                        contentColor = MaterialTheme.colorScheme.onError
+                    ),
+                    enabled = !deleteInProgress
+                ) {
+                    if (deleteInProgress) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onError
+                        )
+                        Spacer(Modifier.width(8.dp))
+                    }
+                    Text(if (deleteInProgress) "Deleting..." else "Delete Everything")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showDeleteConfirmDialog = false },
+                    enabled = !deleteInProgress
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }
 

@@ -68,6 +68,11 @@ class ReceiptRepository(
         receiptDao.delete(receipt)
     }
 
+    suspend fun deleteAll() {
+        receiptItemDao.deleteAll()
+        receiptDao.deleteAll()
+    }
+
     suspend fun getReceiptItems(receiptId: Int): List<ReceiptItem> =
         receiptItemDao.getItemsForReceipt(receiptId)
 

@@ -78,20 +78,20 @@ class BackupWorker(
         Log.i(TAG, "Starting nightly backup for ${account.name}")
 
         try {
-            // Copy database
-            val dbPath = context.getDatabasePath("spenit.db")
-            if (!dbPath.exists()) {
-                Log.w(TAG, "Database file not found")
-                return Result.failure()
-            }
+            // Create backup package (ZIP with db + media)
+            val zipFile = driveService.createBackupPackage()
+                ?: return Result.failure()
 
             val dateStr = SimpleDateFormat("yyyy-MM-dd_HHmm", Locale.US).format(Date())
-            val fileName = "SpenIt_Backup_$dateStr.db"
+            val fileName = "SpenIt_Backup_$dateStr.zip"
 
-            val result = driveService.uploadBackup(account, dbPath, fileName)
+            val result = driveService.uploadBackup(account, zipFile, fileName)
+
+            // Clean up temp ZIP
+            zipFile.delete()
 
             if (result.success) {
-                val sizeKb = dbPath.length() / 1024
+                val sizeKb = zipFile.length() / 1024
                 BackupNotificationHelper.showBackupSuccess(context, fileName, sizeKb)
                 Log.i(TAG, "Nightly backup successful: ${result.driveFileId}")
                 return Result.success()

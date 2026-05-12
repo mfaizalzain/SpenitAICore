@@ -3,6 +3,8 @@ package com.fmz.spenitaicore.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import android.net.Uri
+import android.content.Intent
+import androidx.core.content.FileProvider
 import com.fmz.spenitaicore.SpenItApp
 import com.fmz.spenitaicore.ai.FinancialDocumentType
 import com.fmz.spenitaicore.data.db.entity.IncomeEntry
@@ -433,6 +435,29 @@ class SharedImportsViewModel : ViewModel() {
                 }
             }
             SharedImportKind.Unknown -> { /* Do nothing */ }
+        }
+    }
+
+    fun shareImportResult(item: SharedImportItem) {
+        viewModelScope.launch {
+            try {
+                val file = java.io.File(item.filePath)
+                if (!file.exists()) return@launch
+                val uri = FileProvider.getUriForFile(
+                    appContext,
+                    "${appContext.packageName}.fileprovider",
+                    file
+                )
+                val intent = Intent(Intent.ACTION_SEND).apply {
+                    type = if (item.filePath.endsWith(".pdf", ignoreCase = true)) "application/pdf"
+                            else "image/*"
+                    putExtra(Intent.EXTRA_STREAM, uri)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                val chooser = Intent.createChooser(intent, "Share ${item.displayName}")
+                chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                appContext.startActivity(chooser)
+            } catch (_: Exception) { }
         }
     }
 

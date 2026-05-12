@@ -13,6 +13,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -48,9 +49,15 @@ fun DashboardScreen(
     val greeting by viewModel.greeting.collectAsStateWithLifecycle()
     val totalTodayText by viewModel.totalTodayText.collectAsStateWithLifecycle()
     val totalThisWeekText by viewModel.totalThisWeekText.collectAsStateWithLifecycle()
-    val totalThisMonthText by viewModel.totalThisMonthText.collectAsStateWithLifecycle()
     val safeToSpendText by viewModel.safeToSpendText.collectAsStateWithLifecycle()
     val financialStatusText by viewModel.financialStatusText.collectAsStateWithLifecycle()
+    val totalThisMonthText by viewModel.totalThisMonthText.collectAsStateWithLifecycle()
+    val totalLastMonthText by viewModel.totalLastMonthText.collectAsStateWithLifecycle()
+    val monthOverMonthText by viewModel.monthOverMonthText.collectAsStateWithLifecycle()
+    val isSpendingUp by viewModel.isSpendingUp.collectAsStateWithLifecycle()
+    val totalIncomeThisMonthText by viewModel.totalIncomeThisMonthText.collectAsStateWithLifecycle()
+    val averageDailySpendText by viewModel.averageDailySpendText.collectAsStateWithLifecycle()
+    val taxDeductibleTotalText by viewModel.taxDeductibleTotalText.collectAsStateWithLifecycle()
     val dashboardStoryText by viewModel.dashboardStoryText.collectAsStateWithLifecycle()
     val recentReceipts by viewModel.recentReceipts.collectAsStateWithLifecycle()
     val isRefreshing by viewModel.isRefreshing.collectAsStateWithLifecycle()
@@ -119,7 +126,7 @@ fun DashboardScreen(
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.primaryContainer
                     ),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text(
@@ -143,25 +150,64 @@ fun DashboardScreen(
                 }
             }
 
-            // Stats row
+            // Quick Stats
             item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    StatCard(
-                        modifier = Modifier.weight(1f),
-                        label = "Today",
-                        value = totalTodayText,
-                        icon = Icons.Outlined.Today
-                    )
-                    StatCard(
-                        modifier = Modifier.weight(1f),
-                        label = "This Week",
-                        value = totalThisWeekText,
-                        icon = Icons.Outlined.CalendarViewWeek
-                    )
+                Text(
+                    text = "Quick Stats",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        StatCard(
+                            modifier = Modifier.weight(1f),
+                            label = "Today",
+                            value = totalTodayText,
+                            icon = Icons.Outlined.Today
+                        )
+                        StatCard(
+                            modifier = Modifier.weight(1f),
+                            label = "This Week",
+                            value = totalThisWeekText,
+                            icon = Icons.Outlined.CalendarViewWeek
+                        )
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        StatCard(
+                            modifier = Modifier.weight(1f),
+                            label = "Daily Avg",
+                            value = averageDailySpendText,
+                            icon = Icons.Outlined.Timeline
+                        )
+                        StatCard(
+                            modifier = Modifier.weight(1f),
+                            label = "Tax Deduct.",
+                            value = taxDeductibleTotalText,
+                            icon = Icons.Outlined.Receipt,
+                            valueTint = SuccessGreen
+                        )
+                    }
                 }
+            }
+
+            // Insights at a Glance
+            item {
+                InsightsAtGlanceCard(
+                    thisMonthText = totalThisMonthText,
+                    monthOverChange = monthOverMonthText,
+                    isUp = isSpendingUp,
+                    incomeThisCycleText = totalIncomeThisMonthText,
+                    dailyAvgText = averageDailySpendText,
+                    taxDeductibleText = taxDeductibleTotalText,
+                    onClickSeeAll = onNavigateToInsights
+                )
             }
 
             // Quick actions
@@ -224,7 +270,7 @@ fun DashboardScreen(
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.surfaceVariant
                         ),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
                     ) {
                         Column(
                             modifier = Modifier
@@ -579,21 +625,22 @@ fun StatCard(
     modifier: Modifier = Modifier,
     label: String,
     value: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    valueTint: Color? = null
 ) {
     Card(
         modifier = modifier,
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
             Box(
                 modifier = Modifier
                     .size(32.dp)
                     .background(
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                        color = MaterialTheme.colorScheme.primaryContainer,
                         shape = androidx.compose.foundation.shape.CircleShape
                     ),
                 contentAlignment = Alignment.Center
@@ -614,7 +661,8 @@ fun StatCard(
             Text(
                 text = value,
                 style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold
+                fontWeight = FontWeight.SemiBold,
+                color = valueTint ?: Color.Unspecified
             )
         }
     }
@@ -627,11 +675,12 @@ fun ActionChip(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     onClick: () -> Unit
 ) {
-    OutlinedCard(
+    Card(
         modifier = modifier.clickable(onClick = onClick),
-        colors = CardDefaults.outlinedCardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-        )
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Row(
             modifier = Modifier.padding(12.dp),
@@ -641,7 +690,7 @@ fun ActionChip(
                 modifier = Modifier
                     .size(32.dp)
                     .background(
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                        color = MaterialTheme.colorScheme.primaryContainer,
                         shape = androidx.compose.foundation.shape.CircleShape
                     ),
                 contentAlignment = Alignment.Center
@@ -660,5 +709,112 @@ fun ActionChip(
                 fontWeight = FontWeight.Medium
             )
         }
+    }
+}
+
+// ── Insights at a Glance ───────────────────────────────────────────
+
+@Composable
+fun InsightsAtGlanceCard(
+    thisMonthText: String,
+    monthOverChange: String,
+    isUp: Boolean,
+    incomeThisCycleText: String,
+    dailyAvgText: String,
+    taxDeductibleText: String,
+    onClickSeeAll: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            // Header row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "\uD83D\uDCCA Insights at a Glance",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold
+                )
+                TextButton(onClick = onClickSeeAll, contentPadding = PaddingValues(horizontal = 8.dp)) {
+                    Text("See All", style = MaterialTheme.typography.labelMedium)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Top row: Monthly spend + trend
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                InsightMiniStat(
+                    modifier = Modifier.weight(1f),
+                    label = "Spent this cycle",
+                    value = thisMonthText
+                )
+                InsightMiniStat(
+                    modifier = Modifier.weight(1f),
+                    label = "vs Last Cycle",
+                    value = monthOverChange,
+                    valueColor = if (isUp) ErrorRed else SuccessGreen
+                )
+                InsightMiniStat(
+                    modifier = Modifier.weight(1f),
+                    label = "Daily Avg",
+                    value = dailyAvgText
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Bottom row: Income + tax
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                InsightMiniStat(
+                    modifier = Modifier.weight(1f),
+                    label = "Income this cycle",
+                    value = incomeThisCycleText
+                )
+                InsightMiniStat(
+                    modifier = Modifier.weight(1f),
+                    label = "Tax Deductible",
+                    value = taxDeductibleText
+                )
+                Box(modifier = Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+@Composable
+private fun InsightMiniStat(
+    label: String,
+    value: String,
+    valueColor: Color = MaterialTheme.colorScheme.onSurface,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier = modifier) {
+        Text(
+            text = value,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = valueColor
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }

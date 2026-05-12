@@ -6,7 +6,7 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.io.File
 
-class SharedImportStore(context: Context) {
+class SharedImportStore(private val context: Context) {
 
     private val file = File(context.filesDir, "shared_imports.json")
     private val json = Json {
@@ -38,5 +38,15 @@ class SharedImportStore(context: Context) {
     fun add(item: SharedImportItem) {
         val existing = load()
         save(existing + item)
+    }
+
+    /**
+     * Clears all shared import data:
+     * - Deletes the shared_imports.json file
+     * - Deletes the shared_imports/ media directory and all imported files
+     */
+    fun clear() {
+        file.delete()
+        File(context.filesDir, "shared_imports").deleteRecursively()
     }
 }
