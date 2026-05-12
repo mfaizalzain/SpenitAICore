@@ -55,6 +55,7 @@ fun ReceiptScanScreen(
 
     val context = LocalContext.current
     var showCategoryDropdown by remember { mutableStateOf(false) }
+    var showConvertConfirm by remember { mutableStateOf(false) }
     var showTaxCategoryDropdown by remember { mutableStateOf(false) }
 
     val cameraLauncher = rememberLauncherForActivityResult(
@@ -110,7 +111,7 @@ fun ReceiptScanScreen(
     Scaffold(
         topBar = {
             CompactTopAppBar(
-                title = { Text("Scan Expense") },
+                title = { Text("Add Expense") },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.Filled.Close, contentDescription = "Close")
@@ -119,15 +120,13 @@ fun ReceiptScanScreen(
                 actions = {
                     if (viewModel.isEditing) {
                         TextButton(
-                            onClick = {
-                                viewModel.convertToOppositeType(onNavigateBack)
-                            },
+                            onClick = { showConvertConfirm = true },
                             enabled = !isBusy
                         ) {
                             Text("Convert")
                         }
                     }
-                    TextButton(
+                    Button(
                         onClick = {
                             viewModel.saveReceipt()
                             onNavigateBack()

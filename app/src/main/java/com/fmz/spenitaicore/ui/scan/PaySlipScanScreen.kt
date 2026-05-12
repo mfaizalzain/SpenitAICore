@@ -48,6 +48,7 @@ fun PaySlipScanScreen(
 
     val context = LocalContext.current
     var showCategoryDropdown by remember { mutableStateOf(false) }
+    var showConvertConfirm by remember { mutableStateOf(false) }
 
     val cameraLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
@@ -110,7 +111,7 @@ fun PaySlipScanScreen(
     Scaffold(
         topBar = {
             CompactTopAppBar(
-                title = { Text("Scan Income") },
+                title = { Text("Add Income") },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.Filled.Close, contentDescription = "Close")
@@ -119,13 +120,13 @@ fun PaySlipScanScreen(
                 actions = {
                     if (viewModel.isEditing) {
                         TextButton(
-                            onClick = { viewModel.convertToOppositeType(onNavigateBack) },
+                            onClick = { showConvertConfirm = true },
                             enabled = !isBusy
                         ) {
                             Text("Convert to Expense")
                         }
                     }
-                    TextButton(
+                    Button(
                         onClick = {
                             viewModel.saveReceipt()
                             onNavigateBack()
@@ -339,5 +340,29 @@ fun PaySlipScanScreen(
 
             Spacer(modifier = Modifier.height(32.dp))
         }
+    }
+
+    // Convert confirmation dialog
+    if (showConvertConfirm) {
+        AlertDialog(
+            onDismissRequest = { showConvertConfirm = false },
+            title = { Text("Convert to Expense") },
+            text = { Text("Convert this income entry to an expense? The income record will be deleted and a new expense created.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.convertToOppositeType(onNavigateBack)
+                        showConvertConfirm = false
+                    }
+                ) {
+                    Text("Convert", color = MaterialTheme.colorScheme.secondary)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showConvertConfirm = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }

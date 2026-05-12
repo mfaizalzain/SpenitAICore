@@ -58,6 +58,9 @@ fun ExpensesScreen(
     var editNotes by remember { mutableStateOf("") }
     var showCategoryDropdown by remember { mutableStateOf(false) }
     var showPeriodDropdown by remember { mutableStateOf(false) }
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+    var showConvertConfirm by remember { mutableStateOf(false) }
+    var pendingDeleteReceipt by remember { mutableStateOf<Receipt?>(null) }
 
     LaunchedEffect(Unit) {
         viewModel.quietLoad()
@@ -85,7 +88,7 @@ fun ExpensesScreen(
                 onClick = onNavigateToScan,
                 shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)
             ) {
-                Icon(Icons.Filled.Add, contentDescription = "Scan Expense")
+                Icon(Icons.Filled.Add, contentDescription = "Add Expense")
             }
         }
     ) { padding ->
@@ -237,7 +240,10 @@ fun ExpensesScreen(
                             receipt = receipt,
                             onClick = { viewModel.viewReceipt(receipt) },
                             onEdit = { viewModel.startEdit(receipt) },
-                            onDelete = { viewModel.deleteReceipt(receipt) }
+                            onDelete = {
+                                pendingDeleteReceipt = receipt
+                                showDeleteConfirm = true
+                            }
                         )
                     }
                     item { Spacer(modifier = Modifier.height(72.dp)) }
@@ -511,7 +517,7 @@ fun ExpensesScreen(
 
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     IconButton(
-                        onClick = { selectedReceipt?.let { viewModel.convertToIncome(it) } },
+                        onClick = { showConvertConfirm = true },
                         enabled = !isBusy
                     ) {
                         Icon(
@@ -527,10 +533,8 @@ fun ExpensesScreen(
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     IconButton(
                         onClick = {
-                            selectedReceipt?.let {
-                                viewModel.deleteReceipt(it)
-                                viewModel.dismissDetail()
-                            }
+                            pendingDeleteReceipt = selectedReceipt
+                            showDeleteConfirm = true
                         }
                     ) {
                         Icon(
@@ -545,5 +549,57 @@ fun ExpensesScreen(
             }
             Spacer(modifier = Modifier.height(24.dp))
         }
+    }
+
+    // Delete confirmation dialog
+    if (showDeleteConfirm && pendingDeleteReceipt != null) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false; pendingDeleteReceipt = null },
+            title = { Text("Delete Expense") },
+            text = { Text("Delete \"${pendingDeleteReceipt?.merchant}\" permanently? This cannot be undone.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        pendingDeleteReceipt?.let {
+                            viewModel.deleteReceipt(it)
+                            viewModel.dismissDetail()
+                        }
+                        showDeleteConfirm = false
+                        pendingDeleteReceipt = null
+                    }
+                ) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false; pendingDeleteReceipt = null }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // Convert confirmation dialog
+    if (showConvertConfirm && selectedReceipt != null) {
+        AlertDialog(
+            onDismissRequest = { showConvertConfirm = false },
+            title = { Text("Convert to Income") },
+            text = { Text("Convert \"${selectedReceipt?.merchant}\" to an income entry? The expense will be deleted and a new income record created.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        selectedReceipt?.let { viewModel.convertToIncome(it) }
+                        showConvertConfirm = false
+                    }
+                ) {
+                    Text("Convert", color = MaterialTheme.colorScheme.secondary)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showConvertConfirm = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }

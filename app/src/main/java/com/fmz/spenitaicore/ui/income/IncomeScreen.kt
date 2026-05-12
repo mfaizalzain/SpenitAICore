@@ -15,6 +15,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.fmz.spenitaicore.data.db.entity.IncomeSources
+import com.fmz.spenitaicore.data.db.entity.IncomeEntry
 import com.fmz.spenitaicore.ui.components.CompactTopAppBar
 import com.fmz.spenitaicore.ui.components.DatePickerField
 import com.fmz.spenitaicore.ui.components.IncomeCard
@@ -47,6 +48,9 @@ fun IncomeScreen(
 
     var showCategoryDropdown by remember { mutableStateOf(false) }
     var showPeriodDropdown by remember { mutableStateOf(false) }
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+    var showConvertConfirm by remember { mutableStateOf(false) }
+    var pendingDeleteEntry by remember { mutableStateOf<IncomeEntry?>(null) }
 
     LaunchedEffect(Unit) {
         viewModel.quietLoad()
@@ -74,7 +78,7 @@ fun IncomeScreen(
                 onClick = onNavigateToScan,
                 shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)
             ) {
-                Icon(Icons.Filled.Add, contentDescription = "Scan Income")
+                Icon(Icons.Filled.Add, contentDescription = "Add Income")
             }
         }
     ) { padding ->
@@ -238,7 +242,10 @@ fun IncomeScreen(
                             entry = entry,
                             onClick = { viewModel.viewIncome(entry) },
                             onEdit = { viewModel.startEdit(entry) },
-                            onDelete = { viewModel.deleteIncome(entry) }
+                            onDelete = {
+                                pendingDeleteEntry = entry
+                                showDeleteConfirm = true
+                            }
                         )
                     }
                     item { Spacer(modifier = Modifier.height(72.dp)) }
@@ -425,7 +432,7 @@ fun IncomeScreen(
 
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     IconButton(
-                        onClick = { selectedEntry?.let { viewModel.convertToExpense(it) } },
+                        onClick = { showConvertConfirm = true },
                         enabled = !isBusy
                     ) {
                         Icon(
@@ -441,10 +448,8 @@ fun IncomeScreen(
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     IconButton(
                         onClick = {
-                            selectedEntry?.let {
-                                viewModel.deleteIncome(it)
-                                viewModel.dismissDetail()
-                            }
+                            pendingDeleteEntry = selectedEntry
+                            showDeleteConfirm = true
                         }
                     ) {
                         Icon(
@@ -459,5 +464,57 @@ fun IncomeScreen(
             }
             Spacer(modifier = Modifier.height(24.dp))
         }
+    }
+
+    // Delete confirmation dialog
+    if (showDeleteConfirm && pendingDeleteEntry != null) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false; pendingDeleteEntry = null },
+            title = { Text("Delete Income") },
+            text = { Text("Delete \"${pendingDeleteEntry?.source}\" permanently? This cannot be undone.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        pendingDeleteEntry?.let {
+                            viewModel.deleteIncome(it)
+                            viewModel.dismissDetail()
+                        }
+                        showDeleteConfirm = false
+                        pendingDeleteEntry = null
+                    }
+                ) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false; pendingDeleteEntry = null }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // Convert confirmation dialog
+    if (showConvertConfirm && selectedEntry != null) {
+        AlertDialog(
+            onDismissRequest = { showConvertConfirm = false },
+            title = { Text("Convert to Expense") },
+            text = { Text("Convert \"${selectedEntry?.source}\" to an expense? The income entry will be deleted and a new expense record created.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        selectedEntry?.let { viewModel.convertToExpense(it) }
+                        showConvertConfirm = false
+                    }
+                ) {
+                    Text("Convert", color = MaterialTheme.colorScheme.secondary)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showConvertConfirm = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }

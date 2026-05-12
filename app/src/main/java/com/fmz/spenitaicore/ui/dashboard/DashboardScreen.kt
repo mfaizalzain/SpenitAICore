@@ -69,6 +69,10 @@ fun DashboardScreen(
     val editingReceipt by viewModel.editingReceipt.collectAsStateWithLifecycle()
     val isBusy by viewModel.isBusy.collectAsStateWithLifecycle()
 
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+    var showConvertConfirm by remember { mutableStateOf(false) }
+    var pendingDeleteReceipt by remember { mutableStateOf<Receipt?>(null) }
+
     LaunchedEffect(Unit) {
         viewModel.quietLoad()
     }
@@ -95,10 +99,9 @@ fun DashboardScreen(
         floatingActionButton = {
             FloatingActionButton(
                 onClick = onNavigateToScan,
-                containerColor = MaterialTheme.colorScheme.primary,
                 shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)
             ) {
-                Icon(Icons.Filled.Add, contentDescription = "Scan Expense", tint = MaterialTheme.colorScheme.onPrimary)
+                Icon(Icons.Filled.Add, contentDescription = "Add Expense")
             }
         }
     ) { padding ->
@@ -220,7 +223,7 @@ fun DashboardScreen(
                     ) {
                         ActionChip(
                             modifier = Modifier.weight(1f),
-                            label = "Scan Expense",
+                            label = "Add Expense",
                             icon = Icons.Filled.CameraAlt,
                             onClick = onNavigateToScan
                         )
@@ -303,7 +306,10 @@ fun DashboardScreen(
                         receipt = receipt,
                         onClick = { viewModel.viewReceipt(receipt) },
                         onEdit = { viewModel.startEdit(receipt) },
-                        onDelete = { viewModel.deleteReceipt(receipt) }
+                        onDelete = {
+                            pendingDeleteReceipt = receipt
+                            showDeleteConfirm = true
+                        }
                     )
                 }
             }
@@ -604,7 +610,7 @@ fun DashboardScreen(
 
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     IconButton(
-                        onClick = { selectedReceipt?.let { viewModel.convertToIncome(it) } },
+                        onClick = { showConvertConfirm = true },
                         enabled = !isBusy
                     ) {
                         Icon(
@@ -620,10 +626,8 @@ fun DashboardScreen(
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     IconButton(
                         onClick = {
-                            selectedReceipt?.let {
-                                viewModel.deleteReceipt(it)
-                                viewModel.dismissDetail()
-                            }
+                            pendingDeleteReceipt = selectedReceipt
+                            showDeleteConfirm = true
                         }
                     ) {
                         Icon(
@@ -638,6 +642,58 @@ fun DashboardScreen(
             }
             Spacer(modifier = Modifier.height(24.dp))
         }
+    }
+
+    // Delete confirmation dialog
+    if (showDeleteConfirm && pendingDeleteReceipt != null) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false; pendingDeleteReceipt = null },
+            title = { Text("Delete Expense") },
+            text = { Text("Delete \"${pendingDeleteReceipt?.merchant}\" permanently? This cannot be undone.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        pendingDeleteReceipt?.let {
+                            viewModel.deleteReceipt(it)
+                            viewModel.dismissDetail()
+                        }
+                        showDeleteConfirm = false
+                        pendingDeleteReceipt = null
+                    }
+                ) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false; pendingDeleteReceipt = null }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // Convert confirmation dialog
+    if (showConvertConfirm && selectedReceipt != null) {
+        AlertDialog(
+            onDismissRequest = { showConvertConfirm = false },
+            title = { Text("Convert to Income") },
+            text = { Text("Convert \"${selectedReceipt?.merchant}\" to an income entry? The expense will be deleted and a new income record created.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        selectedReceipt?.let { viewModel.convertToIncome(it) }
+                        showConvertConfirm = false
+                    }
+                ) {
+                    Text("Convert", color = MaterialTheme.colorScheme.secondary)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showConvertConfirm = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }
 
