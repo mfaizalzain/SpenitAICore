@@ -1,14 +1,14 @@
-# Play Beta Publishing Pack
+# Play Store Publishing Pack
 
-Prepared on 2026-05-06.
+Refreshed on 2026-05-13 for the current SpenIt AICore UI and feature set.
 
 ## Upload Build
 
 - Signed AAB: `app/build/outputs/bundle/release/app-release.aab`
 - Application ID: `com.fmz.spenitaicore`
-- Version: `1.0.0`
-- Version code: `3`
-- Track: use Internal testing or Closed testing for beta.
+- Version: `1.1.2`
+- Version code: `15`
+- Track: use Internal testing, Closed testing, or Production depending on release readiness.
 
 ## Signing
 
@@ -39,10 +39,22 @@ set +a
   - `publish/play/assets/phone-income.png`
   - `publish/play/assets/phone-insights.png`
 
+Recommended refreshed screenshot set for the current UI:
+
+1. Dashboard with safe-to-spend, quick stats, import actions, and recent expenses
+2. Expenses with search, filters, categories, and receipt records
+3. Shared Imports with receipt/PDF/bank statement queue and processing states
+4. Income with payslip scanning, source filters, and totals
+5. Insights with AI analysis, top categories, weekly trends, and tax-deductible total
+6. Tax Relief with yearly totals, category summary, deductible receipts, and ZIP export
+
+The current checked-in screenshot assets still cover Dashboard, Expenses, Income, and Insights. Regenerate the set above before the next Play submission so the Store listing shows the new Tax Relief tab and Shared Imports workflow.
+
 ## Store Copy
 
 - Listing copy: `publish/play/store-listing.md`
 - Release notes: `publish/play/release-notes.txt`
+- Creative direction: `publish/play/play-store-experience.md`
 
 ## Before Submitting For Review
 
@@ -53,5 +65,6 @@ set +a
 - Complete Data Safety based on actual collection, sharing, encryption, and deletion behavior.
 - Complete App content declarations, including financial features, permissions, and target audience.
 - Add testers to the Internal testing or Closed testing track.
+- Check that the Play Console account deletion, data deletion, financial features, ads, and AI/provider disclosures match the production build.
 
 The app-ads.txt seller line for the configured AdMob publisher ID is prepared in `publish/play/app-ads.txt`.

@@ -267,10 +267,14 @@ fun SpenItNavHost(
                     pendingImportSignal = sharedImportSignal,
                     onNavigateBack = { navController.popBackStack() },
                     onNavigateToEditReceipt = { receiptId ->
-                        navController.navigate("receipt_scan?receiptId=$receiptId")
+                        navController.navigate("receipt_scan?receiptId=$receiptId") {
+                            popUpTo("shared_imports") { inclusive = true }
+                        }
                     },
                     onNavigateToEditIncome = { incomeEntryId ->
-                        navController.navigate("payslip_scan?incomeEntryId=$incomeEntryId")
+                        navController.navigate("payslip_scan?incomeEntryId=$incomeEntryId") {
+                            popUpTo("shared_imports") { inclusive = true }
+                        }
                     },
                     onImportCountChanged = { count ->
                         sharedImportCount = count

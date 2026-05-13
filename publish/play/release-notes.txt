@@ -1,11 +1,10 @@
-What's new in 1.0.9:
+What's new in 1.1.2:
 
-- Light theme overhaul with refreshed colours
-- AI provider settings (Gemini, OpenAI, Custom) with offline fallback
-- Universal bank statement import for any Malaysian bank
-- Convert expenses to income and vice versa
+- Refreshed dashboard with safe-to-spend, income context, daily average and tax totals
+- New Tax Relief tab with yearly deductible summaries and ZIP export
+- Improved shared imports for receipts, PDFs, payslips and Malaysian bank statements
+- AI provider settings for AICore, Gemini, OpenAI and compatible custom endpoints
+- Better expense and income search, filters and record conversion
+- Google Drive backup and restore improvements
 - Account deletion option in Settings
-- Search and filter on income page
-- Shared imports cleanup and share improvements
-- Backup and restore reliability fixes
-- Bug fixes and performance improvements
+- UI polish, reliability fixes and performance improvements
