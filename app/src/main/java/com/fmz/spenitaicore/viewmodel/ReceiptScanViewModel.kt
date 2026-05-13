@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.fmz.spenitaicore.SpenItApp
 import com.fmz.spenitaicore.data.db.entity.Receipt
 import com.fmz.spenitaicore.data.db.entity.ReceiptItem
+import com.fmz.spenitaicore.util.CategorySuggestionService
 import com.fmz.spenitaicore.util.DateUtils
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -149,6 +150,13 @@ class ReceiptScanViewModel(
                             Log.d("ReceiptScanVM", "Set category: ${result.category}")
                         }
                         if (!result.notes.isNullOrBlank()) _notes.value = result.notes
+                        // If AI returned a generic income category, use local suggestion
+                        val merchant = _merchant.value
+                        if (merchant.isNotBlank() && CategorySuggestionService.isGenericCategory(_category.value, true)) {
+                            val localSuggested = CategorySuggestionService.suggestIncomeCategory(merchant)
+                            _category.value = localSuggested
+                            Log.d("ReceiptScanVM", "Override generic category → $localSuggested")
+                        }
                     } else {
                         Log.w("ReceiptScanVM", "extractIncomeData returned null")
                     }
@@ -170,6 +178,13 @@ class ReceiptScanViewModel(
                                     total = item.total
                                 )
                             }
+                        }
+                        // If AI returned a generic expense category, use local suggestion
+                        val merchant = _merchant.value
+                        if (merchant.isNotBlank() && CategorySuggestionService.isGenericCategory(_category.value, false)) {
+                            val localSuggested = CategorySuggestionService.suggestExpenseCategory(merchant)
+                            _category.value = localSuggested
+                            Log.d("ReceiptScanVM", "Override generic expense category → $localSuggested")
                         }
                     }
                 }
@@ -302,7 +317,27 @@ class ReceiptScanViewModel(
         }
     }
 
-    fun setMerchant(v: String) { _merchant.value = v }
+    /**
+     * Auto-suggest a category based on merchant/source text if the current
+     * category is still a generic default ("General" for expense, "Other Income"
+     * or "Salary" for income).
+     */
+    private fun autoSuggestCategory(merchant: String) {
+        if (merchant.isBlank()) return
+        val current = _category.value
+        if (!CategorySuggestionService.isGenericCategory(current, isIncome)) return
+        val suggested = if (isIncome) {
+            CategorySuggestionService.suggestIncomeCategory(merchant)
+        } else {
+            CategorySuggestionService.suggestExpenseCategory(merchant)
+        }
+        _category.value = suggested
+    }
+
+    fun setMerchant(v: String) {
+        _merchant.value = v
+        autoSuggestCategory(v)
+    }
     fun setDate(v: String) { _date.value = v }
     fun setTotal(v: Double) { _total.value = v }
     fun setTaxAmount(v: Double) { _taxAmount.value = v }
