@@ -745,10 +745,7 @@ fun SettingsScreen(
     // Backup list dialog
     if (isLoadingBackups || availableBackups.isNotEmpty() || restoreError != null) {
         AlertDialog(
-            onDismissRequest = {
-                viewModel.clearRestoreError()
-                viewModel.clearSelectedBackup()
-            },
+            onDismissRequest = viewModel::clearBackupList,
             title = { Text("Restore from Backup") },
             text = {
                 Column {
@@ -769,7 +766,7 @@ fun SettingsScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Spacer(modifier = Modifier.height(12.dp))
-                        availableBackups.take(10).forEach { backup ->
+                        availableBackups.take(5).forEach { backup ->
                             val isSelected = selectedBackupForRestore?.id == backup.id
                             Card(
                                 modifier = Modifier
@@ -806,10 +803,7 @@ fun SettingsScreen(
                 }
             },
             dismissButton = {
-                TextButton(onClick = {
-                    viewModel.clearRestoreError()
-                    viewModel.clearSelectedBackup()
-                }) {
+                TextButton(onClick = { viewModel.clearBackupList() }) {
                     Text("Cancel")
                 }
             }

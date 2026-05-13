@@ -485,6 +485,13 @@ class SettingsViewModel : ViewModel() {
         _selectedBackupForRestore.value = null
     }
 
+    fun clearBackupList() {
+        _availableBackups.value = emptyList()
+        _restoreError.value = null
+        _selectedBackupForRestore.value = null
+        _isLoadingBackups.value = false
+    }
+
     fun confirmRestore() {
         val backup = _selectedBackupForRestore.value ?: return
         viewModelScope.launch {

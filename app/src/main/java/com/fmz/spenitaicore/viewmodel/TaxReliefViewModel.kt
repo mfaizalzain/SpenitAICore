@@ -38,6 +38,7 @@ class TaxReliefViewModel : ViewModel() {
     private val container = SpenItApp.instance.container
     private val receiptRepo: ReceiptRepository = container.receiptRepository
     private val exportService = container.exportService
+    private val preferences = container.preferences
 
     private val _state = MutableStateFlow(TaxReliefUiState())
     val state: StateFlow<TaxReliefUiState> = _state.asStateFlow()
@@ -102,6 +103,7 @@ class TaxReliefViewModel : ViewModel() {
             isLoading = true,
             exportError = null
         )
+        val defaultCurrency = preferences.getDefaultCurrency()
         try {
             val receipts = receiptRepo.getTaxReceipts(year)
             val grouped = receipts.groupBy { it.taxCategory?.takeIf { cat -> cat.isNotBlank() } ?: "Uncategorised" }
@@ -120,7 +122,7 @@ class TaxReliefViewModel : ViewModel() {
                 categories = categories,
                 totalRelief = totalTax,
                 totalExpense = totalExp,
-                currency = receipts.firstOrNull()?.currency ?: "$",
+                currency = receipts.firstOrNull()?.currency ?: defaultCurrency,
                 isLoading = false
             )
         } catch (e: Exception) {
@@ -128,6 +130,7 @@ class TaxReliefViewModel : ViewModel() {
                 receipts = emptyList(),
                 categories = emptyList(),
                 totalRelief = 0.0,
+                currency = defaultCurrency,
                 isLoading = false,
                 exportError = e.message ?: "Unable to load tax relief expenses."
             )
