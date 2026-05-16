@@ -8,6 +8,7 @@ import android.provider.MediaStore
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.result.IntentSenderRequest
 import androidx.core.content.ContextCompat
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -30,6 +31,9 @@ import com.fmz.spenitaicore.data.db.entity.IncomeSources
 import com.fmz.spenitaicore.ui.components.CompactTopAppBar
 import com.fmz.spenitaicore.ui.components.DatePickerField
 import com.fmz.spenitaicore.viewmodel.ReceiptScanViewModel
+import com.google.mlkit.vision.documentscanner.GmsDocumentScannerOptions
+import com.google.mlkit.vision.documentscanner.GmsDocumentScanning
+import com.google.mlkit.vision.documentscanner.GmsDocumentScanningResult
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -51,47 +55,50 @@ fun PaySlipScanScreen(
     var showCategoryDropdown by remember { mutableStateOf(false) }
     var showConvertConfirm by remember { mutableStateOf(false) }
 
-    val cameraLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult()
+    // ---------- ML Kit Document Scanner (auto-crop payslips) ----------
+    val documentScannerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartIntentSenderForResult()
     ) { result ->
         if (result.resultCode == android.app.Activity.RESULT_OK) {
-            val bitmap = result.data?.extras?.get("data") as? android.graphics.Bitmap
-            if (bitmap != null) {
-                try {
-                    val imagesDir = java.io.File(context.filesDir, "images")
-                    imagesDir.mkdirs()
-                    val file = java.io.File(imagesDir, "income_${System.currentTimeMillis()}.jpg")
-                    file.outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 95, it) }
-                    viewModel.setImage(file.absolutePath)
-                } catch (e: Exception) {
-                    android.util.Log.e("PaySlipScan", "Failed to save bitmap", e)
+            try {
+                val scanResult = GmsDocumentScanningResult.fromActivityResultIntent(result.data)
+                val firstPage = scanResult?.pages?.firstOrNull()
+                val imageUri = firstPage?.imageUri
+                if (imageUri != null) {
+                    viewModel.setImageUri(imageUri)
+                } else {
+                    Toast.makeText(context, "No image returned", Toast.LENGTH_SHORT).show()
                 }
+            } catch (e: Exception) {
+                android.util.Log.e("PaySlipScan", "Scan result failed", e)
+                Toast.makeText(context, "Scan failed: ${e.message}", Toast.LENGTH_SHORT).show()
             }
         }
     }
 
-    val cameraPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        if (isGranted) {
-            cameraLauncher.launch(Intent(MediaStore.ACTION_IMAGE_CAPTURE))
-        } else {
-            Toast.makeText(context, "Camera permission is required to take photos", Toast.LENGTH_LONG).show()
-        }
-    }
-
-    fun launchCamera() {
+    fun launchDocumentScanner() {
         try {
-            if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA)
-                == PackageManager.PERMISSION_GRANTED
-            ) {
-                cameraLauncher.launch(Intent(MediaStore.ACTION_IMAGE_CAPTURE))
-            } else {
-                cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
-            }
+            val options = GmsDocumentScannerOptions.Builder()
+                .setScannerMode(GmsDocumentScannerOptions.SCANNER_MODE_FULL)
+                .setGalleryImportAllowed(true)
+                .setPageLimit(1)
+                .setResultFormats(GmsDocumentScannerOptions.RESULT_FORMAT_JPEG)
+                .build()
+
+            val scanner = GmsDocumentScanning.getClient(options)
+            scanner.getStartScanIntent(context as android.app.Activity)
+                .addOnSuccessListener { intentSender ->
+                    documentScannerLauncher.launch(
+                        IntentSenderRequest.Builder(intentSender).build()
+                    )
+                }
+                .addOnFailureListener { e ->
+                    android.util.Log.e("PaySlipScan", "Scanner launch failed", e)
+                    Toast.makeText(context, "Scanner not available: ${e.message}", Toast.LENGTH_LONG).show()
+                }
         } catch (e: Exception) {
-            android.util.Log.e("PaySlipScan", "Camera launch failed", e)
-            Toast.makeText(context, "${e.javaClass.simpleName}", Toast.LENGTH_LONG).show()
+            android.util.Log.e("PaySlipScan", "Scanner init failed", e)
+            Toast.makeText(context, "${e.javaClass.simpleName}: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -163,12 +170,12 @@ fun PaySlipScanScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     FilledTonalButton(
-                        onClick = { launchCamera() },
+                        onClick = { launchDocumentScanner() },
                         modifier = Modifier.weight(1f)
                     ) {
                         Icon(Icons.Filled.CameraAlt, null)
                         Spacer(Modifier.width(4.dp))
-                        Text("Retake")
+                        Text("Re-scan")
                     }
                     FilledTonalButton(
                         onClick = { documentPickerLauncher.launch(arrayOf("image/*", "application/pdf")) },
@@ -200,11 +207,11 @@ fun PaySlipScanScreen(
                         Spacer(modifier = Modifier.height(16.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Button(
-                                onClick = { launchCamera() }
+                                onClick = { launchDocumentScanner() }
                             ) {
                                 Icon(Icons.Filled.CameraAlt, null)
                                 Spacer(Modifier.width(4.dp))
-                                Text("Camera")
+                                Text("Scan Document")
                             }
                             Button(
                                 onClick = { documentPickerLauncher.launch(arrayOf("image/*", "application/pdf")) }

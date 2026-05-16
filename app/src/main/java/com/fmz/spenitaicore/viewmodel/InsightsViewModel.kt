@@ -25,6 +25,18 @@ class InsightsViewModel : ViewModel() {
     private val _selectedRange = MutableStateFlow("Last30")
     val selectedRange: StateFlow<String> = _selectedRange
 
+    /** Per-period cache for AI-generated insights — avoids regenerating when switching ranges */
+    private data class InsightsCache(
+        val summary: String?,
+        val keyFindings: List<String>,
+        val savingTips: List<SavingTip>,
+        val weeklyTrend: List<SpendingTrend>,
+        val anomalyAlert: String?,
+        val lastUpdateTime: Long
+    )
+
+    private val insightsCache = mutableMapOf<String, InsightsCache>()
+
     private val _totalThisMonth = MutableStateFlow(0.0)
     val totalThisMonth: StateFlow<Double> = _totalThisMonth
 
@@ -73,6 +85,9 @@ class InsightsViewModel : ViewModel() {
     private val _aiStatusText = MutableStateFlow("")
     val aiStatusText: StateFlow<String> = _aiStatusText
 
+    private val _lastInsightUpdateTime = MutableStateFlow(0L)
+    val lastInsightUpdateTime: StateFlow<Long> = _lastInsightUpdateTime
+
     private val _isBusy = MutableStateFlow(false)
     val isBusy: StateFlow<Boolean> = _isBusy
 
@@ -115,11 +130,23 @@ class InsightsViewModel : ViewModel() {
     fun selectRange(range: String) {
         if (_selectedRange.value == range) return
         _selectedRange.value = range
-        _aiSummary.value = null
-        _keyFindings.value = emptyList()
-        _savingTips.value = emptyList()
-        _weeklyTrend.value = emptyList()
-        _anomalyAlert.value = null
+
+        // Check per-period cache — if available, restore without re-running AI
+        val cached = insightsCache[range]
+        if (cached != null) {
+            _aiSummary.value = cached.summary
+            _keyFindings.value = cached.keyFindings
+            _savingTips.value = cached.savingTips
+            _weeklyTrend.value = cached.weeklyTrend
+            _anomalyAlert.value = cached.anomalyAlert
+            _lastInsightUpdateTime.value = cached.lastUpdateTime
+        } else {
+            _aiSummary.value = null
+            _keyFindings.value = emptyList()
+            _savingTips.value = emptyList()
+            _weeklyTrend.value = emptyList()
+            _anomalyAlert.value = null
+        }
         quietLoad()
     }
 
@@ -177,7 +204,7 @@ class InsightsViewModel : ViewModel() {
 
         _topCategories.value = categories
 
-        if (forceAiRefresh || _aiSummary.value == null) {
+        if (forceAiRefresh || insightsCache[_selectedRange.value] == null) {
             _aiStatusText.value = "Generating insights..."
             try {
                 val result = aiCore.generateInsights(
@@ -193,6 +220,15 @@ class InsightsViewModel : ViewModel() {
                 _savingTips.value = result.savingTips
                 _weeklyTrend.value = result.weeklyTrend
                 _anomalyAlert.value = result.anomalyAlert
+                _lastInsightUpdateTime.value = System.currentTimeMillis()
+                insightsCache[_selectedRange.value] = InsightsCache(
+                    summary = result.summary,
+                    keyFindings = result.keyFindings,
+                    savingTips = result.savingTips,
+                    weeklyTrend = result.weeklyTrend,
+                    anomalyAlert = result.anomalyAlert,
+                    lastUpdateTime = _lastInsightUpdateTime.value
+                )
                 _aiStatusText.value = "Updated just now"
             } catch (e: Exception) {
                 _aiStatusText.value = "AI insight generation failed"

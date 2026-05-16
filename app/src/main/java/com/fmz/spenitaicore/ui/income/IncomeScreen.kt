@@ -290,7 +290,7 @@ fun IncomeScreen(
             Spacer(modifier = Modifier.height(8.dp))
             Box {
                 OutlinedTextField(
-                    value = editCategory,
+                    value = "${com.fmz.spenitaicore.data.db.entity.IncomeEntry.categoryEmoji(editCategory)} $editCategory",
                     onValueChange = {},
                     label = { Text("Category") },
                     modifier = Modifier.fillMaxWidth(),
@@ -314,7 +314,7 @@ fun IncomeScreen(
                 DropdownMenu(expanded = categoryDropdown, onDismissRequest = { categoryDropdown = false }) {
                     IncomeSources.All.forEach { category ->
                         DropdownMenuItem(
-                            text = { Text(category) },
+                            text = { Text("${com.fmz.spenitaicore.data.db.entity.IncomeEntry.categoryEmoji(category)} $category") },
                             onClick = { editCategory = category; categoryDropdown = false }
                         )
                     }

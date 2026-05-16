@@ -298,6 +298,8 @@ class SettingsViewModel : ViewModel() {
     private val _driveConsentIntent = MutableStateFlow<android.content.Intent?>(null)
     val driveConsentIntent: StateFlow<android.content.Intent?> = _driveConsentIntent
 
+    private var _pendingToggleEnabled = false
+
     // ── Restore ───────────────────────────────────────────────────
 
     private val _availableBackups = MutableStateFlow<List<DriveBackupService.BackupFile>>(emptyList())
@@ -330,8 +332,18 @@ class SettingsViewModel : ViewModel() {
         }
     }
 
-    fun enableBackup() {
+    fun toggleBackup(enabled: Boolean) {
         viewModelScope.launch {
+            if (!enabled) {
+                // Just disable — no auth needed
+                preferences.setBackupEnabled(false, null)
+                _isBackupEnabled.value = false
+                _backupAccountName.value = null
+                BackupWorker.cancel(SpenItApp.instance)
+                return@launch
+            }
+
+            // Enabling — need Drive auth first
             _isBackingUp.value = true
             _backupError.value = null
             try {
@@ -348,18 +360,15 @@ class SettingsViewModel : ViewModel() {
                     authService.authorizeDrive(account)
                 }
 
-                // Store backup settings
+                // Store backup preferences and schedule — but DON'T run backup
                 preferences.setBackupEnabled(true, account.name)
                 _isBackupEnabled.value = true
                 _backupAccountName.value = account.name
-
-                // Schedule nightly backup
-                val context = SpenItApp.instance
-                BackupWorker.schedule(context)
-
-                // Run first backup immediately
-                runManualBackup(account)
+                BackupWorker.schedule(SpenItApp.instance)
+                _isBackingUp.value = false
             } catch (e: UserRecoverableAuthException) {
+                // Save the pending intent so consent retry re-enables
+                _pendingToggleEnabled = true
                 _driveConsentIntent.value = e.intent
                 _isBackingUp.value = false
             } catch (e: Exception) {
@@ -372,12 +381,17 @@ class SettingsViewModel : ViewModel() {
 
     fun handleDriveConsentResult(granted: Boolean) {
         _driveConsentIntent.value = null
-        if (granted) {
-            enableBackup() // Retry after consent
+        if (granted && _pendingToggleEnabled) {
+            _pendingToggleEnabled = false
+            toggleBackup(true) // Retry after consent
         } else {
             _isBackingUp.value = false
-            _backupError.value = "Drive access was denied"
+            _backupError.value = if (!granted) "Drive access was denied" else null
         }
+    }
+
+    fun disableBackup() {
+        toggleBackup(false)
     }
 
     fun runManualBackup() {
@@ -428,14 +442,6 @@ class SettingsViewModel : ViewModel() {
             } else {
                 _backupError.value = result.message
             }
-        }
-    }
-
-    fun disableBackup() {
-        viewModelScope.launch {
-            preferences.setBackupEnabled(false, null)
-            _isBackupEnabled.value = false
-            BackupWorker.cancel(SpenItApp.instance)
         }
     }
 

@@ -165,6 +165,11 @@ Return ONLY valid JSON with no markdown, no explanation, no extra text.
 
 Extract ALL transaction rows. Each transaction should have: date (YYYY-MM-DD), description, amount (positive for credit, negative for debit), type ("credit" or "debit").
 
+IMPORTANT: Look at sign prefixes/suffixes on amounts:
+- Amount with "+" before or after (e.g. "+100.00" or "100.00+") → positive credit (income)
+- Amount with "-" before or after (e.g. "-50.00" or "50.00-") → negative debit (expense)
+- Parenthetical amounts "(50.00)" → negative debit (expense)
+
 Handle these date formats:
 - DD/MM/YY or DD/MM/YYYY
 - D MMM YYYY or DD MMM YYYY (e.g., "1 Mar 2026")
@@ -529,7 +534,11 @@ Rules:
             // If remote found too few, fall through to OCR
         }
 
-        // ── Primary path: ML Kit OCR + regex parser (fast, no AICore quota) ────
+        // ── If remote AI is configured but offline/failed → try OCR directly ─
+        // Gemini Nano AI is skipped for bank statements because its output context
+        // is too limited to return complete transaction data, even for one page.
+        // ML Kit OCR + regex is less accurate but more reliable for this use case.
+        Log.d("AiCoreService", "Remote AI not available — using ML Kit OCR + regex for bank statement")
         val textTransactions = mutableListOf<BankTransaction>()
         for ((index, bitmap) in bitmaps.withIndex()) {
             Log.d("AiCoreService", "OCR page ${index + 1}/${bitmaps.size}")
@@ -540,59 +549,14 @@ Rules:
         val textDeduped = textTransactions.distinctBy { "${it.date}|${it.amount}|${it.description.take(40)}" }
         Log.d("AiCoreService", "OCR+regex: ${textDeduped.size} transactions found")
 
-        if (textDeduped.size >= 5) {
-            return BankStatementResult(transactions = textDeduped)
-        }
+        val hintMessage = if (!isRemoteConfigured()) {
+            "Tip: Configure an AI API key in Settings for more accurate bank statement extraction."
+        } else null
 
-        // ── Fallback: Gemini Nano AI (with WakeLock to keep foreground status) ─
-        Log.d("AiCoreService", "OCR found ${textDeduped.size} transactions — falling back to AI")
-        val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
-        @Suppress("DEPRECATION")
-        val wakeLock = powerManager.newWakeLock(
-            PowerManager.SCREEN_BRIGHT_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP,
-            "SpenItAICore:BankStatementExtraction"
-        )
-        wakeLock.acquire(10 * 60 * 1000L)
-        return try {
-            val modelResult = getAvailableModel()
-            val model = modelResult.model ?: return BankStatementResult(
-                errorMessage = modelResult.errorMessage ?: "AI model not available."
-            )
-
-            var bankName = ""
-            var accountLast4 = ""
-            var period = ""
-            val allTransactions = mutableListOf<BankTransaction>()
-            var pageErrors = 0
-
-            for ((index, bitmap) in bitmaps.withIndex()) {
-                Log.d("AiCoreService", "AI page ${index + 1}/${bitmaps.size}")
-                val pageResult = extractPageTransactions(model, bitmap)
-                if (pageResult == null) { pageErrors++; continue }
-                if (bankName.isEmpty()) bankName = pageResult.bankName
-                if (accountLast4.isEmpty()) accountLast4 = pageResult.accountLast4
-                if (period.isEmpty()) period = pageResult.period
-                allTransactions += pageResult.transactions
-            }
-
-            Log.d("AiCoreService", "AI total: ${allTransactions.size} transactions")
-            val aiDeduped = allTransactions.distinctBy { "${it.date}|${it.amount}|${it.description.take(40)}" }
-            // Prefer whichever method yielded more transactions
-            val best = if (aiDeduped.size >= textDeduped.size) aiDeduped else textDeduped
-            Log.d("AiCoreService", "Using ${if (best === aiDeduped) "AI" else "OCR"} result: ${best.size} transactions")
-
-            if (best.isEmpty() && pageErrors > 0 && pageErrors == bitmaps.size) {
-                BankStatementResult(errorMessage = "Could not extract transactions. Try a clearer image or different file.")
-            } else {
-                BankStatementResult(bankName = bankName, accountLast4 = accountLast4, period = period, transactions = best)
-            }
-        } catch (e: Exception) {
-            Log.e("AiCoreService", "Bank statement AI fallback error", e)
-            // If AI also fails, return whatever OCR found (even if < 5)
-            if (textDeduped.isNotEmpty()) BankStatementResult(transactions = textDeduped)
-            else BankStatementResult(errorMessage = "Extraction error: ${e.message ?: "Unknown error"}")
-        } finally {
-            if (wakeLock.isHeld) wakeLock.release()
+        if (textDeduped.isNotEmpty()) {
+            return BankStatementResult(transactions = textDeduped, hintMessage = hintMessage)
+        } else {
+            return BankStatementResult(errorMessage = "Could not extract transactions. Try a clearer image or different file.")
         }
     }
 
@@ -601,137 +565,7 @@ Rules:
         bitmap: Bitmap
     ): BankStatementResult? {
         return try {
-            val prompt = """
-                You are a bank statement parser. Extract all transaction data from this bank statement page.
-                This page may be a scanned PDF, image, or text PDF.
-                Return ONLY valid JSON with no markdown, no explanation, no extra text.
-
-                STEP 1 — BANK METADATA (from header/logo area only):
-                - bankName: Full bank name from logo or header text.
-                  Known Malaysian banks: Maybank, Maybank Islamic, CIMB Bank, Public Bank, HSBC, HSBC Amanah,
-                  Standard Chartered, OCBC, DBS, UOB, RHB, Hong Leong Bank, Affin Bank, Alliance Bank,
-                  AmBank, Bank Rakyat, Bank Islam, BSN, Citibank, Ryt Bank, YTL Digital Bank,
-                  Bank Muamalat, Bank Simpanan Nasional, UOB Malaysia, GX Bank, GX Bank Berhad
-                - accountLast4: Last 4 digits of the primary account number shown.
-                  Account examples:
-                  "162236-564519" → last 4 of full string "162236564519" → "4519"
-                  "85 4480 3271" → "3271"
-                  "001-169473-108" → last 4 of "001169473108" → "3108"
-                  "916-329-481-4" → last 4 of "9163294814" → "4814"
-                  Remove dashes and spaces first, then take the last 4 characters that are digits.
-                - period: Statement period as seen in header. Examples: "Mar 2026", "01/03/2026 - 31/03/2026",
-                  "01 Mar 2026 to 31 Mar 2026", "1 Mar 2026 to 31 Mar 2026", "From 1 Mar 2026 to 31 Mar 2026"
-
-                STEP 2 — DATE PARSING (ALL dates must be output as YYYY-MM-DD):
-
-                Handle ALL of these Malaysian bank statement formats:
-                a) DD/MM/YY or DD/MM/YYYY → "01/03/26" = 2026-03-01, "15/03/2026" = 2026-03-15
-                b) DDMmmYYYY (no separators) → "27Mar2026" = 2026-03-27, "01Apr2026" = 2026-04-01
-                c) D MMM YYYY or DD MMM YYYY → "1 Mar 2026" = 2026-03-01, "31 Mar 2026" = 2026-03-31
-                d) DD Mon or D Mon (day + abbreviated month, year is from statement period) →
-                   "01 Mar" means March 1 of the statement period year, "28 Feb" means Feb 28 of that year
-                   This format is used by UOB Malaysia — infer the year from the statement period header
-                e) MMM DD YYYY or MMM D YYYY → "Apr 1 2026" = 2026-04-01
-                f) YYYY-MM-DD → keep as-is
-                g) 2-digit year: 00–99 → 2000–2099 (e.g., "26" → "2026")
-
-                Month abbreviation map: Jan=01 Feb=02 Mar=03 Apr=04 May=05 Jun=06 Jul=07 Aug=08 Sep=09 Oct=10 Nov=11 Dec=12
-
-                If a transaction row has no date (continuation of previous row), carry forward the last seen date.
-                If year is absent and a day+month pattern is found (e.g., "01 Mar"), use the year from the statement period header.
-
-                STEP 3 — SKIP NON-TRANSACTION ROWS:
-                Do NOT include any of these as transactions:
-                - Balance rows: "Opening balance", "Closing balance", "Beginning balance", "Ending balance",
-                  "Balance brought forward", "Balance carried forward", "BALANCE B/F", "CLOSING BALANCE",
-                  "BALANCE C/F", "OPENING BALANCE", "BEGINNING BALANCE", "ENDING BALANCE"
-                - Summary rows: "Total credit", "Total debit", "Total transactions", "Transaction turnover",
-                  "Transaction count", "TOTAL CREDIT", "TOTAL DEBIT"
-                - Column headers or section dividers (e.g., "URUSNIAGA AKAUN", "ACCOUNT TRANSACTIONS",
-                  "Tarikh Transaksi", "Butiran Transaksi Akaun", "Account Transaction Details")
-                - Account summary sections (e.g., "Your Portfolio at a Glance", "Summary of Your Portfolio",
-                  "Gambaran Keseluruhan Akaun", "Account Overview")
-                - Page totals or sub-totals without a specific transaction date
-                - Daily interest payouts below RM 1.00 (e.g., "+0.05", "+0.02" — Ryt Bank daily interest)
-                - Internal money movements between account pockets (e.g., "From Ryt Pocket", "To Ryt Pocket",
-                  "Money movement" — these are not real income/expenses)
-                - Balance entries that are just continuations or recurring labels
-
-                STEP 4 — AMOUNT EXTRACTION:
-
-                Identify the layout type from the page and extract accordingly:
-
-                Layout A — Separate Deposits/Withdrawals or Credit/Debit columns (HSBC Amanah, UOB Malaysia, GX Bank):
-                 - Amount in Deposits or Credit column → positive number, type="credit"
-                 - Amount in Withdrawals or Debit column → positive number stored as negative, type="debit"
-                 - Ignore the "Balance" column entirely
-                 - For UOB: the columns are "Deposit/Deposits" and "Pengeluaran/Withdrawals"
-                 - For HSBC: columns are "Deposits" and "Withdrawals", balance has DR suffix
-                 - For GX Bank: columns are "Money in" and "Money out" with a separate "Interest earned" column
-                   - Interest earned from the "Interest earned" column → tiny amounts, SKIP them (already skipped in Step 3)
-                   - GX Bank account format: "8888-00135452-1" → accountLast4 = "4521" (last 4 digits of "8888001354521")
-
-                Layout B — Single amount column with trailing sign (Maybank M2U / Maybank Islamic):
-                - "300.00+" or "1,309.00+" → positive, type="credit"
-                - "69.00-" or "200.00-" → negative, type="debit"
-                - The amount column is the column BEFORE the balance column
-                - Note: Maybank has Chinese text headers too
-
-                Layout C — Single amount column with leading sign (+/- prefix) (Ryt Bank / YTL Digital Bank):
-                - "+1,280.00" or starting with "+" → positive, type="credit"
-                - "-30.00" or starting with "-" → negative, type="debit"
-                - Ryt Bank shows daily interest payouts (+0.01..+0.08) — SKIP these per Step 3
-                - Ryt Bank shows Ref. IDs — strip them from descriptions
-
-                Layout D — CR/DR suffix: "1,309.00 CR" → credit, "100.00 DR" → debit
-
-                Layout E — Three-column with +/- prefix (Maybank Islamic savings):
-                - First column: "SALE DEBIT" or "IBK FUND TFR TO A/C" etc. — this is the transaction TYPE label
-                - Second column: the amount with trailing +/- sign
-                - Third column: statement balance
-                - The transaction description continues on sub-lines below the date row
-                - IMPORTANT: Combine all sub-lines into one description
-
-                Amount formatting rules:
-                - Thousand separator comma: "1,234.56" → 1234.56
-                - Bracket negatives: "(100.00)" → -100.00
-                - Strip currency symbols (RM, MYR, $, etc.)
-                - The running balance / statement balance column is NOT a transaction amount — ignore it
-                - Amount may be in a column labeled "JUMLAH URUSNIAGA" (Maybank) or "Amaun" (Ryt/UOB)
-                - For scanned PDFs: OCR may produce messy amounts — use best judgment
-
-                STEP 5 — DESCRIPTION CLEANING:
-                - Combine all text lines belonging to one transaction into a single string.
-                - For HSBC: merge all detail lines (REF IDs, merchant, location) into one clear description
-                - For Maybank M2U: include the main description line (e.g., "SALE DEBIT") and sub-lines
-                  (merchant name marked with *, location, method) as one description
-                - For Ryt Bank: include the full description including "To/From" prefix and transfer type
-                - For UOB: the description may span multiple columns — combine all text between date and amount
-                - IMPORTANT — REMOVE these from descriptions (they add no value):
-                  - "Ref. ID:" and the ref ID code
-                  - "Transaction date:" and the date
-                  - Card number patterns like "Card ••9700" or "Card ####"
-                  - Reference numbers like "MYR0000000000003255", "REF XXXXX-XXXXX"
-                  - "HIB-", "LP -", "DW -" prefixes
-                  - "EREF", "REMI", "REF ZAFA-xxxxx" patterns
-                - Keep: merchant names, "SALE DEBIT", "PAYMENT VIA MYDEBIT", "IBK FUND TFR",
-                  "TRANSFER FROM A/C", "FUND TRANSFER TO A/", "CMS-DIRECT DEBIT",
-                  "ATM Cash-out", "CR Card Pymt", "DuitNow/Instant Trf", "JomPAY",
-                  "Salary", "Bonus Interest", "Interest Credit"
-
-                STEP 6 — TRANSACTION TYPE RULES:
-                - type="credit": deposits, salary/income, refunds, incoming transfers (IBK FUND TFR TO A/C,
-                  FUND TRANSFER TO A/, TRANSFER FROM A/C with positive amount), interest earned,
-                  government credits, tax refunds, CR Card Pymt (if shown as deposit)
-                - type="debit": withdrawals, purchases (SALE DEBIT, PAYMENT VIA MYDEBIT), payments,
-                  outgoing transfers (IBK FUND TFR FR A/C, TRANSFER FROM A/C with negative amount),
-                  fees, ATM cash-out, CMS-DIRECT DEBIT, PYMT FROM A/C, RPP REFUND TRANSFER (unless positive)
-                - If unclear, infer from sign: positive amount → credit, negative amount → debit
-
-                OUTPUT — strict JSON, no markdown fences:
-                {"bankName":"Maybank Islamic","accountLast4":"4519","period":"Mar 2026","transactions":[{"date":"2026-03-01","description":"GRABPAY-EC PETALING JAYA MYS SALE DEBIT","amount":-69.00,"type":"debit"},{"date":"2026-03-10","description":"IBK FUND TFR TO A/C MOHD FAIZAL Transfer MBB CT","amount":300.00,"type":"credit"},{"date":"2026-04-24","description":"TRANSFER FROM EXPRO GROUP MALAYSIA SDN SALARY","amount":10412.51,"type":"credit"},{"date":"2026-04-01","description":"To POKOK PAUH CIK NIE QR Transfer","amount":-12.00,"type":"debit"}]}
-            """.trimIndent()
-
+            val prompt = buildPagePrompt()
             val request = GenerateContentRequest.Builder(
                 ImagePart(bitmap),
                 TextPart(prompt)
@@ -743,6 +577,80 @@ Rules:
                 ?: return null
 
             Log.d("AiCoreService", "Page JSON (first 300): ${jsonStr.take(300)}")
+
+            // Try primary parse
+            val parsed = parsePageResponse(jsonStr)
+            if (parsed != null) return parsed
+
+            // ── Retry with minimal prompt on parse failure (likely truncation) ─
+            Log.d("AiCoreService", "Primary parse failed, retrying with minimal prompt")
+            val retryPrompt = """
+                Extract all transactions from this bank statement page image.
+                Return ONLY JSON: {"bankName":"","accountLast4":"","period":"","transactions":[{"date":"YYYY-MM-DD","description":"","amount":0.0,"type":"credit|debit"}]}
+                Date: DD/MM/YY or D MMM YYYY or DDMmmYYYY. Amount: + is credit, - is debit. Skip: balance, summary, headers, tiny interest.
+            """.trimIndent()
+
+            val retryRequest = GenerateContentRequest.Builder(
+                ImagePart(bitmap),
+                TextPart(retryPrompt)
+            ).build()
+
+            val retryResponse = inferenceMutex.withLock { model.generateContent(retryRequest) }
+            val retryJson = retryResponse.candidates.firstOrNull()?.text
+                ?.replace("```json", "")?.replace("```", "")?.trim()
+                ?: return null
+
+            Log.d("AiCoreService", "Retry JSON (first 300): ${retryJson.take(300)}")
+            parsePageResponse(retryJson)
+        } catch (e: Exception) {
+            Log.e("AiCoreService", "Page extraction error", e)
+            null
+        }
+    }
+
+    /** Build compact extraction prompt to minimize token usage. */
+    private fun buildPagePrompt(): String {
+        return """
+            Extract ALL transactions from this bank statement page.
+            Return ONLY valid JSON — no markdown, no explanation.
+
+            METADATA:
+            - bankName: bank from logo/header. Known: Maybank, CIMB, Public Bank, HSBC, RHB, UOB, OCBC,
+              Hong Leong, Affin, AmBank, Ryt Bank, GX Bank, Bank Islam, BSN, YTL Digital
+            - accountLast4: last 4 digits of account (remove dashes/spaces first)
+            - period: statement period from header (e.g. "Mar 2026", "01/03/2026 - 31/03/2026")
+
+            DATES → YYYY-MM-DD:
+            - DD/MM/YY → 2026-03-01   DDMmmYYYY → 27Mar2026
+            - D MMM YYYY → 1 Mar 2026   DD Mon (no year) → infer from statement period
+            - MMM DD YYYY → Apr 1 2026
+            - If no date on a row, use last seen date
+            - Month: Jan=01, Feb=02, Mar=03, Apr=04, May=05, Jun=06, Jul=07, Aug=08, Sep=09, Oct=10, Nov=11, Dec=12
+
+            SKIP: balance rows, summary rows, column headers, page totals, daily interest < RM1.00,
+            internal pocket transfers. Do NOT include "Opening balance", "Closing balance", "BALANCE B/F".
+
+            AMOUNTS → just the transaction amount (not the running balance):
+            - Separate credit/debit columns → use the correct column
+            - Trailing sign: "300.00+" → +300.00 (credit), "69.00-" → -69.00 (debit)
+            - Leading sign: "+1,280" → credit, "-30.00" → debit
+            - CR/DR suffix: "100.00 CR" → credit, "100.00 DR" → debit
+            - Parenthetical "(50.00)" → debit
+            - Strip commas and currency symbols (RM, MYR)
+
+            DESCRIPTIONS: merge all sub-lines into one string. Remove Ref. IDs, card numbers,
+            reference codes. Keep merchant, "SALE DEBIT", "IBK FUND TFR", "Salary", merchant names.
+
+            TYPE: positive → "credit" (income), negative → "debit" (expense)
+
+            OUTPUT FORMAT:
+            {"bankName":"","accountLast4":"","period":"","transactions":[{"date":"2026-03-01","description":"GRABPAY SALE DEBIT","amount":-69.00,"type":"debit"},{"date":"2026-03-10","description":"SALARY","amount":10412.51,"type":"credit"}]}
+        """.trimIndent()
+    }
+
+    /** Parse the AI response into a BankStatementResult. Returns null if JSON is invalid. */
+    private fun parsePageResponse(jsonStr: String): BankStatementResult? {
+        return try {
             val jsonElement = parseFirstJsonElement(jsonStr) ?: return null
             val jsonObj = jsonElement as? JsonObject
             val transactionElements = when (jsonElement) {
@@ -764,7 +672,7 @@ Rules:
                 transactions = transactions
             )
         } catch (e: Exception) {
-            Log.e("AiCoreService", "Page extraction error", e)
+            Log.e("AiCoreService", "Page JSON parse error", e)
             null
         }
     }

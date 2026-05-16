@@ -82,7 +82,7 @@ object BankStatementParser {
     /** Lines that are definitely NOT transaction rows. */
     private val skipLineRx = Regex(
         """(?i)\b(opening\s*balance|closing\s*balance|beginning\s*balance|""" +
-        """ending\s*balance|balance\s*(brought|carried)\s*forward|""" +
+        """ending\s*balance|balance\s*(brought|bring|carried)\s*forward|""" +
         """balance\s*b/?f|balance\s*c/?f|total\s*(credit|debit)|""" +
         """transaction\s*(turnover|count)|page\s+\d+\s+of\s+\d+|""" +
         """protected\s+by\s+pidm|end\s+of\s+statement|""" +
@@ -94,8 +94,9 @@ object BankStatementParser {
     /** Balance marker patterns — skip these entirely. */
     private val balanceMarkerRx = Regex(
         """(?i)\b(opening\s+balance|closing\s+balance|beginning\s+balance|""" +
-        """ending\s+balance|balance\s+(brought|carried)\s+forward|""" +
-        """balance\s+b/?f|balance\s+c/?f|baki\s+(awal|akhir))\b"""
+        """ending\s+balance|balance\s+(brought|bring|carried)\s+forward|""" +
+        """balance\s+b/?f|balance\s+c/?f|baki\s+(awal|akhir|bawa)\b|""" +
+        """baki\s+bawa\s+ke\s+muka|baki\s+harian)\b"""
     )
 
     private val moneyMovementRx = Regex(
@@ -367,8 +368,9 @@ object BankStatementParser {
             // Also check for CR/DR markers on the line
             val isCrLine = Regex("""\bCR\b""", RegexOption.IGNORE_CASE).containsMatchIn(trimmed)
             val isDrLine = Regex("""\bDR\b""", RegexOption.IGNORE_CASE).containsMatchIn(trimmed)
-            val isParenthetical = Regex("""\([\d,]+\.\d{2}\)""").containsMatchIn(trimmed)
-            val trailingMinus = Regex("""[\d,]+\.\d{2}\s*-""").containsMatchIn(trimmed)
+            val isParenthetical = Regex("""\([\d,]+\.[\d]{2}\)""").containsMatchIn(trimmed)
+            val trailingMinus = Regex("""[\d,]+\.[\d]{2}\s*-""").containsMatchIn(trimmed)
+            val trailingPlus = Regex("""[\d,]+\.[\d]{2}\s*\+""").containsMatchIn(trimmed)
 
             // Pick amount: prefer rightmost or the one with sign context
             val amountStr = if (amountMatches.size == 1) {
@@ -390,7 +392,7 @@ object BankStatementParser {
                 isDrLine -> false
                 isParenthetical -> false
                 hasLeadingMinus || trailingMinus -> false
-                hasLeadingPlus -> true
+                hasLeadingPlus || trailingPlus -> true
                 else -> {
                     // Infer from description keywords
                     val desc = trimmed.replace(pureAmountRx, "").trim()

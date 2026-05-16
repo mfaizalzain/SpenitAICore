@@ -59,6 +59,8 @@ fun DashboardScreen(
     val taxDeductibleTotalText by viewModel.taxDeductibleTotalText.collectAsStateWithLifecycle()
     val dashboardStoryText by viewModel.dashboardStoryText.collectAsStateWithLifecycle()
     val recentReceipts by viewModel.recentReceipts.collectAsStateWithLifecycle()
+    val latestInsightSummary by viewModel.latestInsightSummary.collectAsStateWithLifecycle()
+    val latestInsightFinding by viewModel.latestInsightFinding.collectAsStateWithLifecycle()
     val isRefreshing by viewModel.isRefreshing.collectAsStateWithLifecycle()
     val selectedReceipt by viewModel.selectedReceipt.collectAsStateWithLifecycle()
     val selectedItems by viewModel.selectedItems.collectAsStateWithLifecycle()
@@ -207,7 +209,7 @@ fun DashboardScreen(
                 }
             }
 
-            // Insights at a Glance
+            // AI-Powered Insights at a Glance
             item {
                 InsightsAtGlanceCard(
                     thisMonthText = totalThisMonthText,
@@ -215,42 +217,10 @@ fun DashboardScreen(
                     isUp = isSpendingUp,
                     incomeThisCycleText = totalIncomeThisMonthText,
                     dailyAvgText = averageDailySpendText,
-                    taxDeductibleText = taxDeductibleTotalText
+                    taxDeductibleText = taxDeductibleTotalText,
+                    aiSummary = latestInsightSummary,
+                    aiFinding = latestInsightFinding
                 )
-            }
-
-            // Quick actions
-            item {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        ActionChip(
-                            modifier = Modifier.weight(1f),
-                            label = "Add Expense",
-                            icon = Icons.Filled.CameraAlt,
-                            onClick = onNavigateToScan
-                        )
-                        ActionChip(
-                            modifier = Modifier.weight(1f),
-                            label = "Add Income",
-                            icon = Icons.Filled.TrendingUp,
-                            onClick = onNavigateToPaySlipScan
-                        )
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        ActionChip(
-                            modifier = Modifier.weight(1f),
-                            label = "Import Bank Statement",
-                            icon = Icons.Filled.AccountBalance,
-                            onClick = onNavigateToSharedImports
-                        )
-                    }
-                }
             }
 
             // Recent receipts header
@@ -859,6 +829,8 @@ fun InsightsAtGlanceCard(
     incomeThisCycleText: String,
     dailyAvgText: String,
     taxDeductibleText: String,
+    aiSummary: String = "",
+    aiFinding: String = "",
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -925,6 +897,29 @@ fun InsightsAtGlanceCard(
                     value = taxDeductibleText
                 )
                 Box(modifier = Modifier.weight(1f))
+            }
+
+            // AI insight summary
+            if (aiSummary.isNotBlank()) {
+                Spacer(modifier = Modifier.height(12.dp))
+                HorizontalDivider()
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = aiSummary,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+                if (aiFinding.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(verticalAlignment = Alignment.Top) {
+                        Text("\uD83D\uDCA1 ", style = MaterialTheme.typography.bodySmall)
+                        Text(
+                            text = aiFinding,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                        )
+                    }
+                }
             }
         }
     }

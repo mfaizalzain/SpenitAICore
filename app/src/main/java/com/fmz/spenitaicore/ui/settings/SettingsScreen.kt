@@ -546,8 +546,25 @@ fun SettingsScreen(
                 }
             }
 
+            // Backup toggle switch
+            item {
+                val backupSubtitle = if (isBackupEnabled) {
+                    if (backupAccountName != null) "Backed up to $backupAccountName · Nightly"
+                    else "Nightly auto backup enabled"
+                } else {
+                    "Off — back up your data to Google Drive"
+                }
+                SwitchSettingsItem(
+                    title = "Back Up to Google Drive",
+                    subtitle = backupSubtitle,
+                    checked = isBackupEnabled,
+                    onCheckedChange = { viewModel.toggleBackup(it) },
+                    icon = Icons.Outlined.FileDownload
+                )
+            }
+
+            // Backup details (only when enabled)
             if (isBackupEnabled) {
-                // Backup status
                 item {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
@@ -556,98 +573,55 @@ fun SettingsScreen(
                         )
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    Icons.Filled.CloudDone,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Auto backup enabled", fontWeight = FontWeight.SemiBold)
-                            }
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                "Nightly backup to Google Drive",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            backupAccountName?.let {
-                                Text(
-                                    "Account: $it",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
                             if (lastBackupTime > 0) {
                                 val formatter = remember { java.text.SimpleDateFormat("MMM dd, yyyy 'at' hh:mm a", java.util.Locale.US) }
-                                Text(
-                                    "Last backup: ${formatter.format(java.util.Date(lastBackupTime))}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        Icons.Filled.CloudDone,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Last backup: ${formatter.format(java.util.Date(lastBackupTime))}",
+                                        style = MaterialTheme.typography.bodyMedium)
+                                }
                             }
-                        }
-                    }
-                }
 
-                // Manual backup button
-                item {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Button(
-                        onClick = { viewModel.runManualBackup() },
-                        enabled = !isBackingUp,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        if (isBackingUp) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                strokeWidth = 2.dp,
-                                color = MaterialTheme.colorScheme.onPrimary
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            // Manual backup button
+                            Button(
+                                onClick = { viewModel.runManualBackup() },
+                                enabled = !isBackingUp,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                if (isBackingUp) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(20.dp),
+                                        strokeWidth = 2.dp,
+                                        color = MaterialTheme.colorScheme.onPrimary
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                    Text("Backing up...")
+                                } else {
+                                    Icon(Icons.Outlined.FileDownload, contentDescription = null)
+                                    Spacer(Modifier.width(8.dp))
+                                    Text("Back Up Now")
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(4.dp))
+
+                            // Restore from Backup
+                            SettingsItem(
+                                title = "Restore from Backup",
+                                subtitle = "Replace current data with a backup from Drive",
+                                icon = Icons.Filled.Restore,
+                                onClick = { viewModel.loadBackups() }
                             )
-                            Spacer(Modifier.width(8.dp))
-                            Text("Backing up...")
-                        } else {
-                            Icon(Icons.Outlined.FileDownload, contentDescription = null)
-                            Spacer(Modifier.width(8.dp))
-                            Text("Back Up Now")
                         }
                     }
-                }
-
-                // Disable backup
-                item {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    TextButton(
-                        onClick = { viewModel.disableBackup() },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(
-                            "Disable auto backup",
-                            color = MaterialTheme.colorScheme.error
-                        )
-                    }
-                }
-
-                // Restore from backup
-                item {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    SettingsItem(
-                        title = "Restore from Backup",
-                        subtitle = "Replace current data with a backup from Drive",
-                        icon = Icons.Filled.Restore,
-                        onClick = { viewModel.loadBackups() }
-                    )
-                }
-            } else {
-                // Enable backup prompt
-                item {
-                    SettingsItem(
-                        title = "Back Up to Google Drive",
-                        subtitle = "Nightly auto backup of your data",
-                        icon = Icons.Outlined.FileDownload,
-                        onClick = { viewModel.enableBackup() }
-                    )
                 }
             }
 

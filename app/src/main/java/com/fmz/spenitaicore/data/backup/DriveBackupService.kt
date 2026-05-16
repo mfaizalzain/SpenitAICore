@@ -5,6 +5,7 @@ import android.accounts.AccountManager
 import android.content.Context
 import android.util.Log
 import com.fmz.spenitaicore.SpenItApp
+import com.fmz.spenitaicore.data.db.AppDatabase
 import com.fmz.spenitaicore.data.db.entity.IncomeEntry
 import com.fmz.spenitaicore.data.db.entity.Receipt
 import com.google.android.gms.auth.GoogleAuthUtil
@@ -300,7 +301,13 @@ class DriveBackupService(private val context: Context) {
             val zipFile = File(context.cacheDir, "spenit_backup_${System.currentTimeMillis()}.zip")
             ZipOutputStream(FileOutputStream(zipFile)).use { zos ->
 
-                // 1. Add database
+                // 1. Add database — force WAL checkpoint first so all data flushes to main file
+                val app = SpenItApp.instance
+                try {
+                    val existingDb = AppDatabase.getInstance(app)
+                    existingDb.openHelper.writableDatabase.execSQL("PRAGMA wal_checkpoint(FULL)")
+                } catch (_: Exception) { }
+
                 val dbFile = context.getDatabasePath("spenit.db")
                 if (dbFile.exists()) {
                     zos.putNextEntry(ZipEntry("spenit.db"))

@@ -130,13 +130,29 @@ class SharedImportsViewModel : ViewModel() {
 
     private fun classifyImports(items: List<SharedImportItem>) {
         viewModelScope.launch {
+            // Mark all items as "In Queue" first so the UI shows the right state
+            setImports(_imports.value.map { item ->
+                if (items.any { it.id == item.id }) {
+                    item.copy(
+                        status = SharedImportStatus.InQueue,
+                        statusMessage = "In queue for AI classification"
+                    )
+                } else item
+            })
+
             items.forEach { item ->
-                setStatusMessage(item.id, "Classifying...")
+                setImports(_imports.value.map {
+                    if (it.id == item.id) it.copy(
+                        status = SharedImportStatus.Processing,
+                        statusMessage = "Classifying..."
+                    ) else it
+                })
                 val kind = aiCore.classifyFinancialDocument(item.filePath).toSharedImportKind()
+                val currentItem = _imports.value.firstOrNull { it.id == item.id } ?: item
                 val updatedItem = if (kind == SharedImportKind.Unknown) {
-                    item.copy(statusMessage = "Choose a type to import")
+                    currentItem.copy(statusMessage = "Choose a type to import")
                 } else {
-                    item.copy(kind = kind, statusMessage = "Detected ${kind.displayName()}")
+                    currentItem.copy(kind = kind, statusMessage = "Detected ${kind.displayName()}")
                 }
                 setImports(_imports.value.map {
                     if (it.id == item.id) updatedItem else it
@@ -326,8 +342,10 @@ class SharedImportsViewModel : ViewModel() {
 
         val importedCount = incomeIds.size + receiptIds.size
         return if (importedCount > 0) {
+            val baseMsg = buildImportMessage(importedCount, duplicateCount, "transaction(s)")
+            val fullMsg = result.hintMessage?.let { "$baseMsg\n$it" } ?: baseMsg
             ImportResult.success(
-                buildImportMessage(importedCount, duplicateCount, "transaction(s)"),
+                fullMsg,
                 receiptIds = receiptIds,
                 incomeEntryIds = incomeIds
             )

@@ -49,7 +49,7 @@ data class Receipt(
             "Credit Card" -> "\uD83D\uDCB3"
             "Rental" -> "\uD83C\uDFE2"
             "Toll" -> "\uD83D\uDEE3\uFE0F"
-            "Parking" -> "\uD83D\uDD7F\uFE0F"
+            "Parking" -> "\uD83D\uDE97"
             "Loan" -> "\uD83C\uDFE6"
             "Mortgage" -> "\uD83C\uDFD8\uFE0F"
             else -> "\uD83E\uDDFE"

@@ -50,6 +50,7 @@ fun InsightsScreen(
     val keyFindings by viewModel.keyFindings.collectAsStateWithLifecycle()
     val anomalyAlert by viewModel.anomalyAlert.collectAsStateWithLifecycle()
     val aiStatusText by viewModel.aiStatusText.collectAsStateWithLifecycle()
+    val lastInsightUpdateTime by viewModel.lastInsightUpdateTime.collectAsStateWithLifecycle()
     val isRefreshing by viewModel.isRefreshing.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) {
@@ -182,8 +183,18 @@ fun InsightsScreen(
                                 ) {
                                     Text("AI Analysis", style = MaterialTheme.typography.titleSmall,
                                         fontWeight = FontWeight.SemiBold)
-                                    Text(aiStatusText, style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Column(horizontalAlignment = Alignment.End) {
+                                        if (lastInsightUpdateTime > 0) {
+                                            val timeStr = remember(lastInsightUpdateTime) {
+                                                val sdf = java.text.SimpleDateFormat("MMM dd, hh:mm a", java.util.Locale.US)
+                                                "Last updated: ${sdf.format(java.util.Date(lastInsightUpdateTime))}"
+                                            }
+                                            Text(timeStr, style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.primary)
+                                        }
+                                        Text(aiStatusText, style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
                                 }
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Text(aiSummary!!, style = MaterialTheme.typography.bodyMedium)

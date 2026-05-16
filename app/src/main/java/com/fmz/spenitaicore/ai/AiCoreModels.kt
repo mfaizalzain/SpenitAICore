@@ -34,7 +34,8 @@ data class BankStatementResult(
     val accountLast4: String = "",
     val period: String = "",
     val transactions: List<BankTransaction> = emptyList(),
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    val hintMessage: String? = null
 )
 
 data class BankTransaction(

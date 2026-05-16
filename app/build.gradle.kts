@@ -13,8 +13,8 @@ android {
         applicationId = "com.fmz.spenitaicore"
         minSdk = 31
         targetSdk = 35
-        versionCode = 15
-        versionName = "1.1.2"
+        versionCode = 16
+        versionName = "1.1.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -147,6 +147,9 @@ dependencies {
 
     // ML Kit (text recognition as fallback when AICore is unavailable)
     implementation("com.google.mlkit:text-recognition:16.0.1")
+
+    // ML Kit — Document Scanner (receipt auto-crop)
+    implementation("com.google.android.gms:play-services-mlkit-document-scanner:16.0.0")
 
     // AICore (Google's on-device AI with Gemini Nano via ML Kit)
     implementation("com.google.mlkit:genai-prompt:1.0.0-beta2")

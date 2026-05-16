@@ -224,6 +224,26 @@ class DashboardViewModel : ViewModel() {
             .sortedWith(compareByDescending<com.fmz.spenitaicore.data.db.entity.Receipt> { it.date }
                 .thenByDescending { it.createdAt })
             .take(5)
+
+        // Generate a quick AI insight if possible
+        try {
+            val insightResult = aiCore.generateInsights(
+                receipts = allReceipts.filter {
+                    val d = DateUtils.toLocalDate(it.date)
+                    SalaryCycle.isInPeriod(d, cycle)
+                },
+                incomeEntries = allIncome.filter { e ->
+                    val d = DateUtils.toLocalDate(e.date)
+                    SalaryCycle.isInPeriod(d, cycle)
+                },
+                periodLabel = "this cycle",
+                currency = currency,
+                periodStart = DateUtils.fromLocalDate(cycle.start),
+                periodEnd = DateUtils.fromLocalDate(cycle.end)
+            )
+            _latestInsightSummary.value = insightResult.summary ?: ""
+            _latestInsightFinding.value = insightResult.keyFindings.firstOrNull() ?: ""
+        } catch (_: Exception) { }
     }
 
     private fun updateFinancialStatus(safeToSpend: Double, totalIncome: Double) {

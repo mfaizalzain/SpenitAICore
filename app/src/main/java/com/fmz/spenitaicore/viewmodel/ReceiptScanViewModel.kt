@@ -298,7 +298,7 @@ class ReceiptScanViewModel(
                         currency = _currency.value,
                         date = _date.value,
                         notes = _notes.value?.trim()?.ifBlank { null },
-                        category = _category.value,
+                        category = "Other Income",
                         imagePath = _imagePath.value
                     )
                     incomeRepo.saveIncomeEntry(entry)
