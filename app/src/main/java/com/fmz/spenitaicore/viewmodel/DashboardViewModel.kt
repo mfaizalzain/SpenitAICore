@@ -118,29 +118,35 @@ class DashboardViewModel : ViewModel() {
     val isRefreshing: StateFlow<Boolean> = _isRefreshing
 
     init {
-        updateGreeting()
+        observeGreeting()
         loadData()
     }
 
-    private fun updateGreeting() {
+    private fun observeGreeting() {
         viewModelScope.launch {
-            val hour = java.time.LocalTime.now().hour
-            val timeGreeting = when (hour) {
-                in 5..11 -> "Morning"
-                in 12..17 -> "Afternoon"
-                else -> "Evening"
+            preferences.userName.collect { name ->
+                _greeting.value = formatGreeting(name)
             }
-            val firstName = preferences.getUserName()
-                .trim()
-                .split(Regex("\\s+"))
-                .firstOrNull()
-                .orEmpty()
+        }
+    }
 
-            _greeting.value = if (firstName.isBlank()) {
-                timeGreeting
-            } else {
-                "$timeGreeting, $firstName"
-            }
+    private fun formatGreeting(name: String): String {
+        val hour = java.time.LocalTime.now().hour
+        val timeGreeting = when (hour) {
+            in 5..11 -> "Morning"
+            in 12..17 -> "Afternoon"
+            else -> "Evening"
+        }
+        val firstName = name
+            .trim()
+            .split(Regex("\\s+"))
+            .firstOrNull()
+            .orEmpty()
+
+        return if (firstName.isBlank()) {
+            timeGreeting
+        } else {
+            "$timeGreeting, $firstName"
         }
     }
 

@@ -97,6 +97,10 @@ class AppPreferences(private val context: Context) {
         prefs[KEY_IS_LOGGED_IN] ?: false
     }
 
+    val userName: Flow<String> = context.dataStore.data.map { prefs ->
+        prefs[KEY_USER_NAME] ?: ""
+    }
+
     suspend fun getIsLoggedIn(): Boolean =
         context.dataStore.data.first()[KEY_IS_LOGGED_IN] ?: false
 
