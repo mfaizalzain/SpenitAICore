@@ -13,10 +13,10 @@ import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
 private val DarkColorScheme = darkColorScheme(
-    primary = IndigoLight,
-    onPrimary = IndigoOnContainer,
-    primaryContainer = IndigoDark,
-    onPrimaryContainer = IndigoContainer,
+    primary = TealLight,
+    onPrimary = TealOnContainer,
+    primaryContainer = TealDark,
+    onPrimaryContainer = TealContainer,
     secondary = TealLight,
     onSecondary = TealOnContainer,
     secondaryContainer = TealDark,
@@ -41,10 +41,10 @@ private val DarkColorScheme = darkColorScheme(
 )
 
 private val LightColorScheme = lightColorScheme(
-    primary = IndigoPrimary,
+    primary = TealSecondary,
     onPrimary = Color.White,
-    primaryContainer = IndigoContainer,
-    onPrimaryContainer = IndigoOnContainer,
+    primaryContainer = TealContainer,
+    onPrimaryContainer = TealOnContainer,
     secondary = TealSecondary,
     onSecondary = Color.White,
     secondaryContainer = TealContainer,
@@ -70,7 +70,7 @@ private val LightColorScheme = lightColorScheme(
 @Composable
 fun SpenItTheme(
     darkTheme: Boolean = false,
-    dynamicColor: Boolean = true,
+    dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
     val colorScheme = when {

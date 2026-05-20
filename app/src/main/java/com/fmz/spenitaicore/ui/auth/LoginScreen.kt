@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -82,22 +83,40 @@ fun LoginScreen(
         }
     }
 
-    val primaryColor = MaterialTheme.colorScheme.primary
-    val secondaryColor = MaterialTheme.colorScheme.secondary
+    val isDarkTheme = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    val heroTextColor = if (isDarkTheme) Color(0xFFEAFBF5) else Color(0xFF0F2D2A)
+    val heroSupportingColor = heroTextColor.copy(alpha = 0.74f)
+    val heroPillColor = if (isDarkTheme) {
+        Color.White.copy(alpha = 0.10f)
+    } else {
+        Color.White.copy(alpha = 0.68f)
+    }
+    val heroBorderColor = if (isDarkTheme) {
+        Color.White.copy(alpha = 0.16f)
+    } else {
+        MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+    }
+    val heroGradient = Brush.verticalGradient(
+        if (isDarkTheme) {
+            listOf(
+                Color(0xFF04110E),
+                Color(0xFF0D2A25),
+                Color(0xFF10243A)
+            )
+        } else {
+            listOf(
+                Color(0xFFFDFEFE),
+                Color(0xFFEAFBF5),
+                Color(0xFFEAF6FF)
+            )
+        }
+    )
 
     Box(modifier = Modifier.fillMaxSize()) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        listOf(
-                            primaryColor,
-                            secondaryColor,
-                            secondaryColor
-                        )
-                    )
-                )
+                .background(heroGradient)
         )
 
         Column(
@@ -121,7 +140,7 @@ fun LoginScreen(
                     text = "SpenIt AICore",
                     style = MaterialTheme.typography.headlineLarge,
                     fontWeight = FontWeight.Bold,
-                    color = Color.White
+                    color = heroTextColor
                 )
 
                 Spacer(modifier = Modifier.height(8.dp))
@@ -129,7 +148,7 @@ fun LoginScreen(
                 Text(
                     text = "Track expenses with on-device AI",
                     style = MaterialTheme.typography.bodyLarge,
-                    color = Color.White.copy(alpha = 0.85f),
+                    color = heroSupportingColor,
                     textAlign = TextAlign.Center
                 )
 
@@ -137,9 +156,9 @@ fun LoginScreen(
 
                 // Feature pills
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FeaturePill("Private")
-                    FeaturePill("AI-Powered")
-                    FeaturePill("On-Device")
+                    FeaturePill("Private", heroPillColor, heroBorderColor, heroTextColor)
+                    FeaturePill("AI-Powered", heroPillColor, heroBorderColor, heroTextColor)
+                    FeaturePill("On-Device", heroPillColor, heroBorderColor, heroTextColor)
                 }
             }
 
@@ -264,16 +283,22 @@ private fun AppIconMark() {
 }
 
 @Composable
-private fun FeaturePill(label: String) {
+private fun FeaturePill(
+    label: String,
+    containerColor: Color,
+    borderColor: Color,
+    contentColor: Color
+) {
     Surface(
         shape = RoundedCornerShape(50),
-        color = Color.White.copy(alpha = 0.2f)
+        color = containerColor,
+        border = androidx.compose.foundation.BorderStroke(1.dp, borderColor)
     ) {
         Text(
             text = label,
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
             style = MaterialTheme.typography.labelSmall,
-            color = Color.White,
+            color = contentColor,
             fontWeight = FontWeight.Medium
         )
     }

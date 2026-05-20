@@ -2,7 +2,7 @@ package com.fmz.spenitaicore.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// ─── Primary: Indigo (modern, clean, versatile) ───────────────────────────
+// ─── Primary: Indigo (legacy accent) ──────────────────────────────────────
 val IndigoPrimary = Color(0xFF4F46E5)
 val IndigoContainer = Color(0xFFE0E7FF)
 val IndigoOnContainer = Color(0xFF1E1B4B)
@@ -11,7 +11,7 @@ val IndigoDark = Color(0xFF3730A3)
 
 // ─── Secondary: Teal ──────────────────────────────────────────────────────
 val TealSecondary = Color(0xFF0D9488)
-val TealContainer = Color(0xFFCCFBF1)
+val TealContainer = Color(0xFFD9FBEF)
 val TealOnContainer = Color(0xFF0F2D2A)
 val TealLight = Color(0xFF2DD4BF)
 val TealDark = Color(0xFF115F59)
@@ -24,14 +24,14 @@ val RoseLight = Color(0xFFFB7185)
 val RoseDark = Color(0xFF9F1239)
 
 // ─── Background / Surface (Light) ─────────────────────────────────────────
-val LightBg = Color(0xFFF8FAFC)
+val LightBg = Color(0xFFF6FDFA)
 val LightSurface = Color(0xFFFFFFFF)
-val LightSurfaceVariant = Color(0xFFF1F5F9)
-val LightContainer = Color(0xFFFFFFFF)
+val LightSurfaceVariant = Color(0xFFEAF7F1)
+val LightContainer = Color(0xFFFBFFFD)
 val LightOnBg = Color(0xFF0F172A)
 val LightOnSurface = Color(0xFF1E293B)
-val LightOutline = Color(0xFFCBD5E1)
-val LightOutlineVariant = Color(0xFFE2E8F0)
+val LightOutline = Color(0xFFBFD8D0)
+val LightOutlineVariant = Color(0xFFDCEBE6)
 
 // ─── Background / Surface (Dark) ──────────────────────────────────────────
 val DarkBg = Color(0xFF0F172A)

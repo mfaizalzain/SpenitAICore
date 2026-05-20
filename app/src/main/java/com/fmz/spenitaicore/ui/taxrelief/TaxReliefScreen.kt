@@ -16,15 +16,19 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.fmz.spenitaicore.R
 import com.fmz.spenitaicore.data.db.entity.Receipt
 import com.fmz.spenitaicore.ui.components.CompactTopAppBar
+import com.fmz.spenitaicore.ui.components.NativeAdCard
 import com.fmz.spenitaicore.ui.components.SharedImportsBadgeIcon
+import com.fmz.spenitaicore.ui.theme.spenItGradientBackground
 import com.fmz.spenitaicore.util.CurrencyFormatter
 import com.fmz.spenitaicore.util.DateUtils
 import com.fmz.spenitaicore.viewmodel.TaxCategorySummary
@@ -64,6 +68,8 @@ fun TaxReliefScreen(
     }
 
     Scaffold(
+        modifier = Modifier.spenItGradientBackground(),
+        containerColor = Color.Transparent,
         topBar = {
             CompactTopAppBar(
                 title = { Text("Tax Relief") },
@@ -150,6 +156,14 @@ fun TaxReliefScreen(
                         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
+                        item {
+                            val adUnitId = LocalContext.current.getString(R.string.admob_native_ad_unit_id)
+                            NativeAdCard(
+                                modifier = Modifier.fillMaxWidth(),
+                                adUnitId = adUnitId
+                            )
+                        }
+
                         if (state.categories.isNotEmpty()) {
                             item {
                                 CategorySummaryRow(

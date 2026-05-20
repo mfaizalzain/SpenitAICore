@@ -2,6 +2,8 @@ package com.fmz.spenitaicore.ui.dashboard
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -13,8 +15,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -26,11 +30,12 @@ import com.fmz.spenitaicore.ui.components.FullBottomSheet
 import com.fmz.spenitaicore.ui.components.BottomSheetDialog
 import com.fmz.spenitaicore.ui.components.DatePickerField
 import com.fmz.spenitaicore.ui.components.AiCoreInstallDialog
-import com.fmz.spenitaicore.ui.components.BannerAd
+import com.fmz.spenitaicore.ui.components.NativeAdCard
 import com.fmz.spenitaicore.ui.components.SharedImportsBadgeIcon
 import com.fmz.spenitaicore.ui.theme.SuccessGreen
 import com.fmz.spenitaicore.ui.theme.WarningOrange
 import com.fmz.spenitaicore.ui.theme.ErrorRed
+import com.fmz.spenitaicore.ui.theme.spenItGradientBackground
 import com.fmz.spenitaicore.viewmodel.DashboardViewModel
 import com.fmz.spenitaicore.viewmodel.ExpensesViewModel
 
@@ -85,9 +90,11 @@ fun DashboardScreen(
     }
 
     Scaffold(
+        modifier = Modifier.spenItGradientBackground(),
+        containerColor = Color.Transparent,
         topBar = {
             CompactTopAppBar(
-                title = { Text("SpenIt AICore") },
+                title = { DashboardBrandTitle() },
                 actions = {
                     IconButton(onClick = onNavigateToSharedImports) {
                         SharedImportsBadgeIcon(count = sharedImportCount)
@@ -131,41 +138,27 @@ fun DashboardScreen(
                 )
             }
 
-            // Financial status
+            // Dashboard overview
             item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer
-                    ),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text(
-                            text = safeToSpendText,
-                            style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = financialStatusText,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = dashboardStoryText,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
-                        )
-                    }
-                }
+                DashboardOverviewCard(
+                    safeToSpendText = safeToSpendText,
+                    financialStatusText = financialStatusText,
+                    dashboardStoryText = dashboardStoryText,
+                    thisMonthText = totalThisMonthText,
+                    monthOverChange = monthOverMonthText,
+                    isUp = isSpendingUp,
+                    incomeThisCycleText = totalIncomeThisMonthText,
+                    dailyAvgText = averageDailySpendText,
+                    taxDeductibleText = taxDeductibleTotalText,
+                    aiSummary = latestInsightSummary,
+                    aiFinding = latestInsightFinding
+                )
             }
 
             // Quick Stats
             item {
                 Text(
-                    text = "Quick Stats",
+                    text = "Quick Spend",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -188,39 +181,7 @@ fun DashboardScreen(
                             icon = Icons.Outlined.CalendarViewWeek
                         )
                     }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        StatCard(
-                            modifier = Modifier.weight(1f),
-                            label = "Daily Avg",
-                            value = averageDailySpendText,
-                            icon = Icons.Outlined.Timeline
-                        )
-                        StatCard(
-                            modifier = Modifier.weight(1f),
-                            label = "Tax Deduct.",
-                            value = taxDeductibleTotalText,
-                            icon = Icons.Outlined.Receipt,
-                            valueTint = SuccessGreen
-                        )
-                    }
                 }
-            }
-
-            // AI-Powered Insights at a Glance
-            item {
-                InsightsAtGlanceCard(
-                    thisMonthText = totalThisMonthText,
-                    monthOverChange = monthOverMonthText,
-                    isUp = isSpendingUp,
-                    incomeThisCycleText = totalIncomeThisMonthText,
-                    dailyAvgText = averageDailySpendText,
-                    taxDeductibleText = taxDeductibleTotalText,
-                    aiSummary = latestInsightSummary,
-                    aiFinding = latestInsightFinding
-                )
             }
 
             // Recent receipts header
@@ -281,11 +242,11 @@ fun DashboardScreen(
                 }
             }
 
-            // Banner ad
+            // Native ad
             item {
-                val adUnitId = LocalContext.current.getString(R.string.admob_banner_ad_unit_id)
-                BannerAd(
-                    modifier = Modifier.fillMaxWidth().wrapContentHeight(),
+                val adUnitId = LocalContext.current.getString(R.string.admob_native_ad_unit_id)
+                NativeAdCard(
+                    modifier = Modifier.fillMaxWidth(),
                     adUnitId = adUnitId
                 )
             }
@@ -495,7 +456,7 @@ fun DashboardScreen(
             selectedReceipt?.let { receipt ->
                 Text(
                     text = receipt.merchant,
-                    style = MaterialTheme.typography.titleLarge,
+                    style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
                 Spacer(modifier = Modifier.height(8.dp))
@@ -675,6 +636,43 @@ fun DashboardScreen(
 }
 
 @Composable
+private fun DashboardBrandTitle() {
+    Row(
+        modifier = Modifier.height(48.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        AppIconMark()
+        Spacer(modifier = Modifier.width(10.dp))
+        Text(
+            text = "SpenIt",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold
+        )
+    }
+}
+
+@Composable
+private fun AppIconMark() {
+    Box(
+        modifier = Modifier
+            .size(32.dp)
+            .clip(RoundedCornerShape(8.dp)),
+        contentAlignment = Alignment.Center
+    ) {
+        Image(
+            painter = painterResource(R.drawable.ic_launcher_background),
+            contentDescription = null,
+            modifier = Modifier.fillMaxSize()
+        )
+        Image(
+            painter = painterResource(R.drawable.ic_launcher_foreground),
+            contentDescription = "SpenIt",
+            modifier = Modifier.fillMaxSize()
+        )
+    }
+}
+
+@Composable
 private fun DashboardFabMenu(
     expanded: Boolean,
     onExpandedChange: (Boolean) -> Unit,
@@ -819,10 +817,13 @@ fun ActionChip(
     }
 }
 
-// ── Insights at a Glance ───────────────────────────────────────────
+// ── Dashboard overview ─────────────────────────────────────────────
 
 @Composable
-fun InsightsAtGlanceCard(
+fun DashboardOverviewCard(
+    safeToSpendText: String,
+    financialStatusText: String,
+    dashboardStoryText: String,
     thisMonthText: String,
     monthOverChange: String,
     isUp: Boolean,
@@ -841,68 +842,93 @@ fun InsightsAtGlanceCard(
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            // Header row
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Safe to spend",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.72f)
+                    )
+                    Text(
+                        text = safeToSpendText,
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
+                Surface(
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.48f),
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    shape = RoundedCornerShape(999.dp)
+                ) {
+                    Box(modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
+                        Text(
+                            text = financialStatusText.ifBlank { "On track" },
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    }
+                }
+            }
+
+            if (dashboardStoryText.isNotBlank()) {
+                Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "\uD83D\uDCCA Insights at a Glance",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold
+                    text = dashboardStoryText,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.75f)
                 )
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
-            // Top row: Monthly spend + trend
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 InsightMiniStat(
                     modifier = Modifier.weight(1f),
-                    label = "Spent this cycle",
+                    label = "Spent",
                     value = thisMonthText
                 )
                 InsightMiniStat(
                     modifier = Modifier.weight(1f),
-                    label = "vs Last Cycle",
-                    value = monthOverChange,
-                    valueColor = if (isUp) ErrorRed else SuccessGreen
-                )
-                InsightMiniStat(
-                    modifier = Modifier.weight(1f),
-                    label = "Daily Avg",
-                    value = dailyAvgText
+                    label = "Income",
+                    value = incomeThisCycleText
                 )
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
-            // Bottom row: Income + tax
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 InsightMiniStat(
                     modifier = Modifier.weight(1f),
-                    label = "Income this cycle",
-                    value = incomeThisCycleText
+                    label = "Daily avg",
+                    value = dailyAvgText
                 )
                 InsightMiniStat(
                     modifier = Modifier.weight(1f),
-                    label = "Tax Deductible",
-                    value = taxDeductibleText
+                    label = "Tax relief",
+                    value = taxDeductibleText,
+                    valueColor = SuccessGreen
                 )
-                Box(modifier = Modifier.weight(1f))
+                InsightMiniStat(
+                    modifier = Modifier.weight(1f),
+                    label = "Vs last",
+                    value = monthOverChange,
+                    valueColor = if (isUp) ErrorRed else SuccessGreen
+                )
             }
 
-            // AI insight summary
             if (aiSummary.isNotBlank()) {
-                Spacer(modifier = Modifier.height(12.dp))
-                HorizontalDivider()
+                Spacer(modifier = Modifier.height(14.dp))
+                HorizontalDivider(color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.16f))
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
                     text = aiSummary,
@@ -912,7 +938,13 @@ fun InsightsAtGlanceCard(
                 if (aiFinding.isNotBlank()) {
                     Spacer(modifier = Modifier.height(8.dp))
                     Row(verticalAlignment = Alignment.Top) {
-                        Text("\uD83D\uDCA1 ", style = MaterialTheme.typography.bodySmall)
+                        Icon(
+                            Icons.Outlined.Lightbulb,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
                         Text(
                             text = aiFinding,
                             style = MaterialTheme.typography.bodySmall,
@@ -929,13 +961,20 @@ fun InsightsAtGlanceCard(
 private fun InsightMiniStat(
     label: String,
     value: String,
-    valueColor: Color = MaterialTheme.colorScheme.onSurface,
+    valueColor: Color = MaterialTheme.colorScheme.onPrimaryContainer,
     modifier: Modifier = Modifier
 ) {
-    Column(modifier = modifier) {
+    Column(
+        modifier = modifier
+            .background(
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.42f),
+                shape = RoundedCornerShape(8.dp)
+            )
+            .padding(10.dp)
+    ) {
         Text(
             text = value,
-            style = MaterialTheme.typography.titleMedium,
+            style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.Bold,
             color = valueColor
         )

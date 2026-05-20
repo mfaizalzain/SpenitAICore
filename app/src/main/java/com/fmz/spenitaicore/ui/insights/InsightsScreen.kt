@@ -14,6 +14,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -23,7 +24,7 @@ import com.fmz.spenitaicore.ai.CategoryBreakdown
 import com.fmz.spenitaicore.ai.SavingTip
 import com.fmz.spenitaicore.ai.SpendingTrend
 import com.fmz.spenitaicore.ui.components.CompactTopAppBar
-import com.fmz.spenitaicore.ui.components.BannerAd
+import com.fmz.spenitaicore.ui.components.NativeAdCard
 import com.fmz.spenitaicore.ui.components.SharedImportsBadgeIcon
 import com.fmz.spenitaicore.ui.theme.*
 import com.fmz.spenitaicore.viewmodel.InsightsViewModel
@@ -58,6 +59,8 @@ fun InsightsScreen(
     }
 
     Scaffold(
+        modifier = Modifier.spenItGradientBackground(),
+        containerColor = Color.Transparent,
         topBar = {
             CompactTopAppBar(
                 title = { Text("Insights") },
@@ -331,11 +334,11 @@ fun InsightsScreen(
                     }
                 }
 
-                // Banner ad
+                // Native ad
                 item {
-                    val adUnitId = LocalContext.current.getString(R.string.admob_banner_ad_unit_id)
-                    BannerAd(
-                        modifier = Modifier.fillMaxWidth().wrapContentHeight(),
+                    val adUnitId = LocalContext.current.getString(R.string.admob_native_ad_unit_id)
+                    NativeAdCard(
+                        modifier = Modifier.fillMaxWidth(),
                         adUnitId = adUnitId
                     )
                 }

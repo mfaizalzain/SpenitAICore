@@ -123,11 +123,24 @@ class DashboardViewModel : ViewModel() {
     }
 
     private fun updateGreeting() {
-        val hour = java.time.LocalTime.now().hour
-        _greeting.value = when (hour) {
-            in 5..11 -> "Good morning"
-            in 12..17 -> "Good afternoon"
-            else -> "Good evening"
+        viewModelScope.launch {
+            val hour = java.time.LocalTime.now().hour
+            val timeGreeting = when (hour) {
+                in 5..11 -> "Morning"
+                in 12..17 -> "Afternoon"
+                else -> "Evening"
+            }
+            val firstName = preferences.getUserName()
+                .trim()
+                .split(Regex("\\s+"))
+                .firstOrNull()
+                .orEmpty()
+
+            _greeting.value = if (firstName.isBlank()) {
+                timeGreeting
+            } else {
+                "$timeGreeting, $firstName"
+            }
         }
     }
 

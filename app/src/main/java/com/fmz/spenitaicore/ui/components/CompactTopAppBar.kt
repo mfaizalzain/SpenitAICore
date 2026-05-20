@@ -5,8 +5,10 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.height
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -22,6 +24,10 @@ fun CompactTopAppBar(
         navigationIcon = navigationIcon,
         actions = actions,
         modifier = modifier.height(48.dp),
-        windowInsets = WindowInsets(0.dp)
+        windowInsets = WindowInsets(0.dp),
+        colors = TopAppBarDefaults.topAppBarColors(
+            containerColor = Color.Transparent,
+            scrolledContainerColor = Color.Transparent
+        )
     )
 }

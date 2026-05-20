@@ -12,11 +12,13 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.fmz.spenitaicore.R
 import com.fmz.spenitaicore.data.db.entity.IncomeSources
 import com.fmz.spenitaicore.data.db.entity.IncomeEntry
 import com.fmz.spenitaicore.ui.components.CompactTopAppBar
@@ -24,7 +26,9 @@ import com.fmz.spenitaicore.ui.components.DatePickerField
 import com.fmz.spenitaicore.ui.components.IncomeCard
 import com.fmz.spenitaicore.ui.components.BottomSheetDialog
 import com.fmz.spenitaicore.ui.components.FullBottomSheet
+import com.fmz.spenitaicore.ui.components.NativeAdCard
 import com.fmz.spenitaicore.ui.components.SharedImportsBadgeIcon
+import com.fmz.spenitaicore.ui.theme.spenItGradientBackground
 import com.fmz.spenitaicore.viewmodel.IncomeViewModel
 import androidx.core.content.FileProvider
 
@@ -62,6 +66,8 @@ fun IncomeScreen(
     }
 
     Scaffold(
+        modifier = Modifier.spenItGradientBackground(),
+        containerColor = Color.Transparent,
         topBar = {
             CompactTopAppBar(
                 title = { Text("Income") },
@@ -247,6 +253,14 @@ fun IncomeScreen(
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    item {
+                        val adUnitId = LocalContext.current.getString(R.string.admob_native_ad_unit_id)
+                        NativeAdCard(
+                            modifier = Modifier.fillMaxWidth(),
+                            adUnitId = adUnitId
+                        )
+                    }
+
                     items(incomeEntries, key = { it.id }) { entry ->
                         IncomeCard(
                             entry = entry,
