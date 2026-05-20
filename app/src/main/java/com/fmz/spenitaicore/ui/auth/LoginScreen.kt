@@ -2,6 +2,7 @@ package com.fmz.spenitaicore.ui.auth
 
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -14,8 +15,11 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
@@ -233,12 +237,7 @@ fun LoginScreen(
                         isLoading = state.isLoading,
                         label = "Sign in with Google",
                         leading = {
-                            Text(
-                                text = "G",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary
-                            )
+                            GoogleLogo(modifier = Modifier.size(20.dp))
                         }
                     )
 
@@ -317,6 +316,62 @@ private fun FeaturePill(
             color = contentColor,
             fontWeight = FontWeight.Medium
         )
+    }
+}
+
+@Composable
+private fun GoogleLogo(modifier: Modifier = Modifier) {
+    Canvas(modifier = modifier) {
+        val s = size.width / 24f
+        scale(s, s, Offset.Zero) {
+            val p = Path()
+            // Blue
+            p.moveTo(22.56f, 12.25f)
+            p.cubicTo(22.56f, 11.47f, 22.49f, 10.72f, 22.36f, 10f)
+            p.lineTo(12f, 10f)
+            p.lineTo(12f, 14.26f)
+            p.lineTo(17.92f, 14.26f)
+            p.cubicTo(17.66f, 15.63f, 16.88f, 16.79f, 15.71f, 17.57f)
+            p.lineTo(15.71f, 20.34f)
+            p.lineTo(19.28f, 20.34f)
+            p.cubicTo(21.36f, 18.42f, 22.56f, 15.6f, 22.56f, 12.25f)
+            drawPath(p, Color(0xFF4285F4))
+
+            // Green
+            p.reset()
+            p.moveTo(12f, 23f)
+            p.cubicTo(15.24f, 23f, 17.95f, 21.92f, 19.93f, 20.09f)
+            p.lineTo(16.36f, 17.32f)
+            p.cubicTo(15.37f, 17.98f, 14.11f, 18.38f, 12.01f, 18.38f)
+            p.cubicTo(8.66f, 18.38f, 5.82f, 16.11f, 4.81f, 13.06f)
+            p.lineTo(1.23f, 13.06f)
+            p.lineTo(1.23f, 15.83f)
+            p.cubicTo(3.21f, 19.68f, 7.31f, 23f, 12f, 23f)
+            drawPath(p, Color(0xFF34A853))
+
+            // Yellow
+            p.reset()
+            p.moveTo(4.8f, 13.06f)
+            p.cubicTo(4.54f, 12.29f, 4.4f, 11.46f, 4.4f, 10.6f)
+            p.cubicTo(4.4f, 9.74f, 4.54f, 8.91f, 4.8f, 8.14f)
+            p.lineTo(4.8f, 5.37f)
+            p.lineTo(1.23f, 5.37f)
+            p.cubicTo(0.44f, 6.95f, 0f, 8.72f, 0f, 10.6f)
+            p.cubicTo(0f, 12.48f, 0.44f, 14.25f, 1.23f, 15.83f)
+            p.lineTo(4.8f, 13.06f)
+            drawPath(p, Color(0xFFFBBC05))
+
+            // Red
+            p.reset()
+            p.moveTo(12f, 4.61f)
+            p.cubicTo(13.76f, 4.61f, 15.34f, 5.21f, 16.58f, 6.4f)
+            p.lineTo(20.01f, 2.97f)
+            p.cubicTo(17.95f, 1.08f, 15.24f, 0f, 12f, 0f)
+            p.cubicTo(7.31f, 0f, 3.21f, 3.32f, 1.23f, 7.83f)
+            p.lineTo(4.8f, 10.6f)
+            p.cubicTo(5.81f, 7.55f, 8.65f, 5.28f, 12f, 5.28f)
+            drawPath(p, Color(0xFFEA4335))
+        }
     }
 }
 

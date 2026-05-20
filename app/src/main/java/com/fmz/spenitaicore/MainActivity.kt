@@ -7,6 +7,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.compose.setContent
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -24,6 +25,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import com.fmz.spenitaicore.data.preferences.THEME_MODE_NIGHT
 import com.fmz.spenitaicore.data.preferences.THEME_MODE_SYSTEM
 import com.fmz.spenitaicore.data.db.entity.SharedImportItem
@@ -34,33 +38,85 @@ import com.fmz.spenitaicore.ui.theme.SpenItTheme
 import com.fmz.spenitaicore.data.notification.ImportNotificationHelper
 import com.fmz.spenitaicore.util.FileUtils
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.launch
 import java.util.UUID
 
 class MainActivity : AppCompatActivity() {
 
+    private companion object {
+        const val AUTHENTICATORS =
+            BiometricManager.Authenticators.BIOMETRIC_STRONG or
+                BiometricManager.Authenticators.DEVICE_CREDENTIAL
+    }
+
     val navigateToSharedImports = Channel<Unit>(Channel.CONFLATED)
 
     private val sharedImportSignal = mutableIntStateOf(0)
-    private val appLockSignal = mutableIntStateOf(0)
+
+    // App Lock state. The app locks only on a fresh process start (cold
+    // launch) - it is NOT re-locked when minimized, which avoids the
+    // stop/recompose/resume race that left a black window.
+    private val locked = mutableStateOf(true)
+    private val unlockFailed = mutableStateOf(false)
+    private var biometricInProgress = false
+    private var prefsLoaded = false
+    private var isLoggedIn = false
+    private var appLockEnabled = false
+
+    private lateinit var biometricPrompt: BiometricPrompt
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         val app = application as SpenItApp
 
+        biometricPrompt = BiometricPrompt(
+            this,
+            ContextCompat.getMainExecutor(this),
+            object : BiometricPrompt.AuthenticationCallback() {
+                override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                    biometricInProgress = false
+                    unlockFailed.value = false
+                    locked.value = false
+                }
+
+                override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                    biometricInProgress = false
+                    unlockFailed.value = true
+                }
+            }
+        )
+
         handleSharedIntent(intent)
         if (intent.getBooleanExtra(ImportNotificationHelper.EXTRA_NAVIGATE_TO_IMPORTS, false)) {
             navigateToSharedImports.trySend(Unit)
         }
 
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                combine(
+                    app.container.preferences.isLoggedIn,
+                    app.container.preferences.isAppLockEnabled
+                ) { loggedIn, lockEnabled -> loggedIn to lockEnabled }
+                    .collect { (loggedIn, lockEnabled) ->
+                        isLoggedIn = loggedIn
+                        appLockEnabled = lockEnabled
+                        if (!prefsLoaded) {
+                            prefsLoaded = true
+                            locked.value = loggedIn && lockEnabled
+                            maybePromptUnlock()
+                        }
+                    }
+            }
+        }
+
         setContent {
             val shareSignal by sharedImportSignal
-            val lockSignal by appLockSignal
 
             val themeMode by app.container.preferences.themeMode.collectAsState(initial = THEME_MODE_SYSTEM)
             val isLoggedInState by app.container.preferences.isLoggedIn.collectAsState(initial = null)
-            val isAppLockEnabledState by app.container.preferences.isAppLockEnabled.collectAsState(initial = null)
 
             val useDarkTheme = when (themeMode) {
                 THEME_MODE_NIGHT -> true
@@ -70,7 +126,8 @@ class MainActivity : AppCompatActivity() {
 
             SpenItTheme(darkTheme = useDarkTheme) {
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    if (isLoggedInState == null || isAppLockEnabledState == null) {
+                    val loggedIn = isLoggedInState
+                    if (loggedIn == null) {
                         Box(
                             modifier = Modifier.fillMaxSize(),
                             contentAlignment = Alignment.Center
@@ -78,86 +135,33 @@ class MainActivity : AppCompatActivity() {
                             CircularProgressIndicator()
                         }
                     } else {
-                        val isLoggedIn = isLoggedInState!!
-                        val isAppLockEnabled = isAppLockEnabledState!!
-
-                        var isAppUnlocked by remember(lockSignal) {
-                            mutableStateOf(!isLoggedIn || !isAppLockEnabled)
-                        }
-                        var promptAppUnlock by remember { mutableStateOf(false) }
-                        val biometricPrompt = remember {
-                            BiometricPrompt(
-                                this@MainActivity,
-                                ContextCompat.getMainExecutor(this@MainActivity),
-                                object : BiometricPrompt.AuthenticationCallback() {
-                                    override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
-                                        isAppUnlocked = true
-                                        promptAppUnlock = false
-                                    }
-
-                                    override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
-                                        if (errorCode != BiometricPrompt.ERROR_NEGATIVE_BUTTON &&
-                                            errorCode != BiometricPrompt.ERROR_USER_CANCELED
-                                        ) {
-                                            promptAppUnlock = false
-                                        }
-                                    }
-                                }
-                            )
-                        }
-
-                        LaunchedEffect(isLoggedIn, isAppLockEnabled) {
-                            if (isLoggedIn && isAppLockEnabled && !isAppUnlocked) {
-                                val canAuthenticate = try {
-                                    BiometricManager.from(this@MainActivity)
-                                        .canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG) ==
-                                        BiometricManager.BIOMETRIC_SUCCESS
-                                } catch (_: Exception) { false }
-                                if (canAuthenticate) {
-                                    promptAppUnlock = true
-                                } else {
-                                    isAppUnlocked = true
-                                }
-                            }
-                        }
-
-                        LaunchedEffect(promptAppUnlock) {
-                            if (promptAppUnlock) {
-                                val promptInfo = BiometricPrompt.PromptInfo.Builder()
-                                    .setTitle("Unlock SpenIt")
-                                    .setSubtitle("Use biometrics to continue")
-                                    .setNegativeButtonText("Cancel")
-                                    .build()
-                                biometricPrompt.authenticate(promptInfo)
-                            }
-                        }
-
                         Box(modifier = Modifier.fillMaxSize()) {
-                            // Main App content - always in composition to preserve state
+                            // Main app content - always in composition to preserve state
                             SpenItNavHost(
                                 container = app.container,
-                                initialLoggedIn = isLoggedIn,
+                                initialLoggedIn = loggedIn,
                                 sharedImportSignal = shareSignal,
                                 navigateToImportsFlow = navigateToSharedImports.receiveAsFlow()
                             )
 
-                            // Lock overlay - covers the app content when locked
-                            if (!isAppUnlocked) {
+                            // Lock overlay - covers app content while locked. Default
+                            // is a blank surface so the biometric prompt appears
+                            // straight over it; the retry UI only shows if the user
+                            // cancels or biometric auth fails.
+                            if (locked.value) {
                                 Surface(
                                     modifier = Modifier.fillMaxSize(),
                                     color = MaterialTheme.colorScheme.background
                                 ) {
-                                    Column(
-                                        modifier = Modifier.fillMaxSize(),
-                                        horizontalAlignment = Alignment.CenterHorizontally,
-                                        verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center
-                                    ) {
-                                        if (promptAppUnlock) {
-                                            CircularProgressIndicator()
-                                        } else {
+                                    if (unlockFailed.value) {
+                                        Column(
+                                            modifier = Modifier.fillMaxSize(),
+                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                            verticalArrangement = Arrangement.Center
+                                        ) {
                                             Text("SpenIt is locked", fontWeight = FontWeight.SemiBold)
                                             Spacer(modifier = Modifier.height(12.dp))
-                                            Button(onClick = { promptAppUnlock = true }) {
+                                            Button(onClick = { showBiometricPrompt() }) {
                                                 Text("Unlock")
                                             }
                                         }
@@ -171,19 +175,49 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        maybePromptUnlock()
+    }
+
+    private fun maybePromptUnlock() {
+        if (prefsLoaded && locked.value && isLoggedIn && appLockEnabled && !biometricInProgress) {
+            showBiometricPrompt()
+        }
+    }
+
+    private fun showBiometricPrompt() {
+        if (biometricInProgress) return
+
+        val canAuthenticate = try {
+            BiometricManager.from(this).canAuthenticate(AUTHENTICATORS) ==
+                BiometricManager.BIOMETRIC_SUCCESS
+        } catch (_: Exception) {
+            false
+        }
+        if (!canAuthenticate) {
+            // No biometrics / device credential available - don't lock the user out.
+            locked.value = false
+            return
+        }
+
+        unlockFailed.value = false
+        biometricInProgress = true
+        val promptInfo = BiometricPrompt.PromptInfo.Builder()
+            .setTitle("Unlock SpenIt")
+            .setSubtitle("Authenticate to continue")
+            .setAllowedAuthenticators(AUTHENTICATORS)
+            .setConfirmationRequired(false)
+            .build()
+        biometricPrompt.authenticate(promptInfo)
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
         handleSharedIntent(intent)
         if (intent.getBooleanExtra(ImportNotificationHelper.EXTRA_NAVIGATE_TO_IMPORTS, false)) {
             navigateToSharedImports.trySend(Unit)
-        }
-    }
-
-    override fun onStop() {
-        super.onStop()
-        if (!isFinishing) {
-            appLockSignal.intValue += 1
         }
     }
 
