@@ -24,6 +24,11 @@ class AppPreferences(private val context: Context) {
         val KEY_USER_EMAIL = stringPreferencesKey("user_email")
         val KEY_USER_PHOTO_URL = stringPreferencesKey("user_photo_url")
         val KEY_AUTH_METHOD = stringPreferencesKey("auth_method")
+        
+        // Cached user info (persists after logout)
+        val KEY_CACHED_USER_NAME = stringPreferencesKey("cached_user_name")
+        val KEY_CACHED_USER_PHOTO_URL = stringPreferencesKey("cached_user_photo_url")
+
         val KEY_BACKUP_ENABLED = booleanPreferencesKey("backup_enabled")
         val KEY_BACKUP_ACCOUNT = stringPreferencesKey("backup_account")
         val KEY_LAST_BACKUP_TIME = longPreferencesKey("last_backup_time")
@@ -143,6 +148,22 @@ class AppPreferences(private val context: Context) {
 
     suspend fun getUserPhotoUrl(): String? =
         context.dataStore.data.first()[KEY_USER_PHOTO_URL]
+
+    // --- Cached User Info ---
+
+    suspend fun getCachedUserName(): String? =
+        context.dataStore.data.first()[KEY_CACHED_USER_NAME]
+
+    suspend fun getCachedUserPhotoUrl(): String? =
+        context.dataStore.data.first()[KEY_CACHED_USER_PHOTO_URL]
+
+    suspend fun setCachedUserInfo(name: String, photoUrl: String?) {
+        context.dataStore.edit {
+            it[KEY_CACHED_USER_NAME] = name
+            if (photoUrl != null) it[KEY_CACHED_USER_PHOTO_URL] = photoUrl
+            else it.remove(KEY_CACHED_USER_PHOTO_URL)
+        }
+    }
 
     // ── Backup ────────────────────────────────────────────────────
 

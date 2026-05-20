@@ -2,7 +2,6 @@ package com.fmz.spenitaicore.ui.components
 
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.RowScope
-import androidx.compose.foundation.layout.height
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -23,7 +22,7 @@ fun CompactTopAppBar(
         title = title,
         navigationIcon = navigationIcon,
         actions = actions,
-        modifier = modifier.height(48.dp),
+        modifier = modifier,
         windowInsets = WindowInsets(0.dp),
         colors = TopAppBarDefaults.topAppBarColors(
             containerColor = Color.Transparent,

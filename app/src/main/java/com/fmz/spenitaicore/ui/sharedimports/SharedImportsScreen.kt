@@ -130,7 +130,13 @@ fun SharedImportsScreen(
     Scaffold(
         topBar = {
             CompactTopAppBar(
-                title = { Text("Shared Imports") },
+                title = { 
+                    Text(
+                        "Shared Imports",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    ) 
+                },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.Filled.ArrowBack, contentDescription = "Back")

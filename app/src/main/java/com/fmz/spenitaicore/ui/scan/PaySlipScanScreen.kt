@@ -119,7 +119,13 @@ fun PaySlipScanScreen(
     Scaffold(
         topBar = {
             CompactTopAppBar(
-                title = { Text("Add Income") },
+                title = { 
+                    Text(
+                        "Add Income",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    ) 
+                },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.Filled.Close, contentDescription = "Close")

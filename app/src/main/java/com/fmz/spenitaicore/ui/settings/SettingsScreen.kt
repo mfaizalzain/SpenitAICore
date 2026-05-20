@@ -7,6 +7,8 @@ import android.content.pm.PackageManager
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.biometric.BiometricManager
+import androidx.biometric.BiometricPrompt
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -33,6 +35,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import android.os.Build
 import androidx.core.content.ContextCompat
+import androidx.fragment.app.FragmentActivity
 import com.fmz.spenitaicore.ui.components.CompactTopAppBar
 import com.fmz.spenitaicore.viewmodel.AuthViewModel
 import com.fmz.spenitaicore.viewmodel.SettingsViewModel
@@ -95,17 +98,54 @@ fun SettingsScreen(
     var showPayDayDropdown by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
+    val activity = context as? FragmentActivity
+    var pendingAppLockEnable by remember { mutableStateOf(false) }
 
-    val notificationPermGranted = remember {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
-                    PackageManager.PERMISSION_GRANTED
-        } else true
-    }
     val notificationPermLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        // Re-composition via LiveData/State handles updates
+    ) { _ -> }
+
+    val canUseBiometrics = remember {
+        try {
+            BiometricManager.from(context)
+                .canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG) ==
+                    BiometricManager.BIOMETRIC_SUCCESS
+        } catch (_: Exception) { false }
+    }
+
+    val appLockPrompt = remember(activity) {
+        activity?.let { act ->
+            BiometricPrompt(
+                act,
+                ContextCompat.getMainExecutor(context),
+                object : BiometricPrompt.AuthenticationCallback() {
+                    override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                        pendingAppLockEnable = false
+                        viewModel.setAppLockEnabled(true)
+                    }
+
+                    override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                        pendingAppLockEnable = false
+                    }
+
+                    override fun onAuthenticationFailed() {
+                        Toast.makeText(context, "Biometric check failed", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            )
+        }
+    }
+
+    LaunchedEffect(pendingAppLockEnable) {
+        if (pendingAppLockEnable && appLockPrompt != null) {
+            pendingAppLockEnable = false
+            val promptInfo = BiometricPrompt.PromptInfo.Builder()
+                .setTitle("Enable App Lock")
+                .setSubtitle("Confirm biometrics to protect SpenIt")
+                .setNegativeButtonText("Cancel")
+                .build()
+            appLockPrompt.authenticate(promptInfo)
+        }
     }
 
     // Drive consent launcher
@@ -144,7 +184,13 @@ fun SettingsScreen(
     Scaffold(
         topBar = {
             CompactTopAppBar(
-                title = { Text("Settings") },
+                title = { 
+                    Text(
+                        "Settings", 
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    ) 
+                },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.Filled.ArrowBack, contentDescription = "Back")
@@ -342,7 +388,19 @@ fun SettingsScreen(
                     title = "App Lock",
                     subtitle = "Require biometrics to open app",
                     checked = isAppLockEnabled,
-                    onCheckedChange = { viewModel.setAppLockEnabled(it) },
+                    onCheckedChange = { enabled ->
+                        if (!enabled) {
+                            viewModel.setAppLockEnabled(false)
+                        } else if (!canUseBiometrics || appLockPrompt == null) {
+                            Toast.makeText(
+                                context,
+                                "Biometric authentication is not available on this device",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        } else {
+                            pendingAppLockEnable = true
+                        }
+                    },
                     icon = Icons.Outlined.Lock
                 )
             }
@@ -461,62 +519,6 @@ fun SettingsScreen(
                 }
             }
 
-            // Notification section
-            item {
-                Divider(modifier = Modifier.padding(vertical = 8.dp))
-                Text("Notifications", style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(vertical = 8.dp))
-            }
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surface
-                    )
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            Icons.Filled.Notifications,
-                            contentDescription = null,
-                            tint = if (notificationPermGranted) MaterialTheme.colorScheme.primary
-                                   else MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Spacer(Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Import & backup notifications",
-                                fontWeight = FontWeight.SemiBold,
-                                style = MaterialTheme.typography.bodyMedium)
-                            Text(
-                                if (notificationPermGranted) "Notifications are enabled"
-                                else "Allow notifications to get import and backup status alerts",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        if (!notificationPermGranted && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                            FilledTonalButton(
-                                onClick = { notificationPermLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) }
-                            ) {
-                                Text("Allow")
-                            }
-                        } else if (notificationPermGranted) {
-                            Icon(Icons.Filled.CheckCircle,
-                                contentDescription = "Allowed",
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(20.dp))
-                        }
-                    }
-                }
-            }
-
             // Backup section
             item {
                 Divider(modifier = Modifier.padding(vertical = 8.dp))
@@ -558,7 +560,14 @@ fun SettingsScreen(
                     title = "Back Up to Google Drive",
                     subtitle = backupSubtitle,
                     checked = isBackupEnabled,
-                    onCheckedChange = { viewModel.toggleBackup(it) },
+                    onCheckedChange = { enabled ->
+                        if (enabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                                notificationPermLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                            }
+                        }
+                        viewModel.toggleBackup(enabled)
+                    },
                     icon = Icons.Outlined.FileDownload
                 )
             }
@@ -823,12 +832,6 @@ fun SettingsScreen(
             }
         )
     }
-
-    // Restore error (when not in the backup list dialog)
-    if (restoreError != null && availableBackups.isEmpty() && !isLoadingBackups) {
-        // Error already shown in the backup list dialog above
-    }
-
 
     // ── AI Provider add/edit dialog ──────────────────
     if (showAiProviderDialog) {

@@ -16,6 +16,8 @@ data class AuthState(
     val userName: String = "",
     val userEmail: String = "",
     val userPhotoUrl: String? = null,
+    val cachedName: String? = null,
+    val cachedPhotoUrl: String? = null,
     val error: String? = null
 )
 
@@ -35,13 +37,23 @@ class AuthViewModel : ViewModel() {
     private fun checkLoginState() {
         viewModelScope.launch {
             val loggedIn = preferences.getIsLoggedIn()
+            val cachedName = preferences.getCachedUserName()
+            val cachedPhoto = preferences.getCachedUserPhotoUrl()
+
             if (loggedIn) {
                 _state.value = AuthState(
                     isLoggedIn = true,
                     userName = preferences.getUserName(),
                     userEmail = preferences.getUserEmail(),
                     userPhotoUrl = preferences.getUserPhotoUrl(),
-                    authMethod = preferences.getAuthMethod()
+                    authMethod = preferences.getAuthMethod(),
+                    cachedName = cachedName,
+                    cachedPhotoUrl = cachedPhoto
+                )
+            } else {
+                _state.value = AuthState(
+                    cachedName = cachedName,
+                    cachedPhotoUrl = cachedPhoto
                 )
             }
         }
@@ -145,6 +157,9 @@ class AuthViewModel : ViewModel() {
         googleId: String,
         idToken: String?
     ) {
+        // Cache info for login screen
+        preferences.setCachedUserInfo(name, photoUrl)
+
         // Persist to DataStore (fast, for app gate)
         preferences.setLoggedIn(
             googleId = googleId,
@@ -171,7 +186,9 @@ class AuthViewModel : ViewModel() {
             authMethod = authMethod,
             userName = name,
             userEmail = email,
-            userPhotoUrl = photoUrl
+            userPhotoUrl = photoUrl,
+            cachedName = name,
+            cachedPhotoUrl = photoUrl
         )
     }
 
@@ -184,7 +201,13 @@ class AuthViewModel : ViewModel() {
                 preferences.clearAuth()
                 authService.clearCredentialState()
                 container.database.userProfileDao().deleteAll()
-                _state.value = AuthState()
+                
+                val cachedName = preferences.getCachedUserName()
+                val cachedPhoto = preferences.getCachedUserPhotoUrl()
+                _state.value = AuthState(
+                    cachedName = cachedName,
+                    cachedPhotoUrl = cachedPhoto
+                )
             } catch (e: Exception) {
                 _state.value = _state.value.copy(
                     isLoading = false,

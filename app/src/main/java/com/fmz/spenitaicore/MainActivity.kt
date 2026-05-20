@@ -5,11 +5,25 @@ import android.net.Uri
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.compose.setContent
+import androidx.biometric.BiometricManager
+import androidx.biometric.BiometricPrompt
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import com.fmz.spenitaicore.data.preferences.THEME_MODE_NIGHT
 import com.fmz.spenitaicore.data.preferences.THEME_MODE_SYSTEM
 import com.fmz.spenitaicore.data.db.entity.SharedImportItem
@@ -28,6 +42,7 @@ class MainActivity : AppCompatActivity() {
     val navigateToSharedImports = Channel<Unit>(Channel.CONFLATED)
 
     private val sharedImportSignal = mutableIntStateOf(0)
+    private val appLockSignal = mutableIntStateOf(0)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -41,7 +56,12 @@ class MainActivity : AppCompatActivity() {
 
         setContent {
             val shareSignal by sharedImportSignal
-            val themeMode by app.container.preferences.themeMode.collectAsState(initial = "day")
+            val lockSignal by appLockSignal
+
+            val themeMode by app.container.preferences.themeMode.collectAsState(initial = THEME_MODE_SYSTEM)
+            val isLoggedInState by app.container.preferences.isLoggedIn.collectAsState(initial = null)
+            val isAppLockEnabledState by app.container.preferences.isAppLockEnabled.collectAsState(initial = null)
+
             val useDarkTheme = when (themeMode) {
                 THEME_MODE_NIGHT -> true
                 THEME_MODE_SYSTEM -> isSystemInDarkTheme()
@@ -50,11 +70,102 @@ class MainActivity : AppCompatActivity() {
 
             SpenItTheme(darkTheme = useDarkTheme) {
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    SpenItNavHost(
-                        container = app.container,
-                        sharedImportSignal = shareSignal,
-                        navigateToImportsFlow = navigateToSharedImports.receiveAsFlow()
-                    )
+                    if (isLoggedInState == null || isAppLockEnabledState == null) {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator()
+                        }
+                    } else {
+                        val isLoggedIn = isLoggedInState!!
+                        val isAppLockEnabled = isAppLockEnabledState!!
+
+                        var isAppUnlocked by remember(lockSignal) {
+                            mutableStateOf(!isLoggedIn || !isAppLockEnabled)
+                        }
+                        var promptAppUnlock by remember { mutableStateOf(false) }
+                        val biometricPrompt = remember {
+                            BiometricPrompt(
+                                this@MainActivity,
+                                ContextCompat.getMainExecutor(this@MainActivity),
+                                object : BiometricPrompt.AuthenticationCallback() {
+                                    override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                                        isAppUnlocked = true
+                                        promptAppUnlock = false
+                                    }
+
+                                    override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                                        if (errorCode != BiometricPrompt.ERROR_NEGATIVE_BUTTON &&
+                                            errorCode != BiometricPrompt.ERROR_USER_CANCELED
+                                        ) {
+                                            promptAppUnlock = false
+                                        }
+                                    }
+                                }
+                            )
+                        }
+
+                        LaunchedEffect(isLoggedIn, isAppLockEnabled) {
+                            if (isLoggedIn && isAppLockEnabled && !isAppUnlocked) {
+                                val canAuthenticate = try {
+                                    BiometricManager.from(this@MainActivity)
+                                        .canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG) ==
+                                        BiometricManager.BIOMETRIC_SUCCESS
+                                } catch (_: Exception) { false }
+                                if (canAuthenticate) {
+                                    promptAppUnlock = true
+                                } else {
+                                    isAppUnlocked = true
+                                }
+                            }
+                        }
+
+                        LaunchedEffect(promptAppUnlock) {
+                            if (promptAppUnlock) {
+                                val promptInfo = BiometricPrompt.PromptInfo.Builder()
+                                    .setTitle("Unlock SpenIt")
+                                    .setSubtitle("Use biometrics to continue")
+                                    .setNegativeButtonText("Cancel")
+                                    .build()
+                                biometricPrompt.authenticate(promptInfo)
+                            }
+                        }
+
+                        Box(modifier = Modifier.fillMaxSize()) {
+                            // Main App content - always in composition to preserve state
+                            SpenItNavHost(
+                                container = app.container,
+                                initialLoggedIn = isLoggedIn,
+                                sharedImportSignal = shareSignal,
+                                navigateToImportsFlow = navigateToSharedImports.receiveAsFlow()
+                            )
+
+                            // Lock overlay - covers the app content when locked
+                            if (!isAppUnlocked) {
+                                Surface(
+                                    modifier = Modifier.fillMaxSize(),
+                                    color = MaterialTheme.colorScheme.background
+                                ) {
+                                    Column(
+                                        modifier = Modifier.fillMaxSize(),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center
+                                    ) {
+                                        if (promptAppUnlock) {
+                                            CircularProgressIndicator()
+                                        } else {
+                                            Text("SpenIt is locked", fontWeight = FontWeight.SemiBold)
+                                            Spacer(modifier = Modifier.height(12.dp))
+                                            Button(onClick = { promptAppUnlock = true }) {
+                                                Text("Unlock")
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -66,6 +177,13 @@ class MainActivity : AppCompatActivity() {
         handleSharedIntent(intent)
         if (intent.getBooleanExtra(ImportNotificationHelper.EXTRA_NAVIGATE_TO_IMPORTS, false)) {
             navigateToSharedImports.trySend(Unit)
+        }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        if (!isFinishing) {
+            appLockSignal.intValue += 1
         }
     }
 

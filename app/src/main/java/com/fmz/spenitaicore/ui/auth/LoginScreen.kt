@@ -7,6 +7,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Fingerprint
 import androidx.compose.material3.*
@@ -17,6 +18,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -25,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil.compose.AsyncImage
 import com.fmz.spenitaicore.R
 import com.fmz.spenitaicore.viewmodel.AuthViewModel
 
@@ -178,7 +181,7 @@ fun LoginScreen(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
-                        text = "Sign in to continue",
+                        text = if (state.cachedName != null) "Welcome back, ${state.cachedName!!.split(" ").first()}" else "Sign in to continue",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
                     )
@@ -189,6 +192,19 @@ fun LoginScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center
                     )
+
+                    // Profile Photo (Cached)
+                    if (state.cachedPhotoUrl != null) {
+                        Spacer(modifier = Modifier.height(20.dp))
+                        AsyncImage(
+                            model = state.cachedPhotoUrl,
+                            contentDescription = "Profile photo",
+                            modifier = Modifier
+                                .size(64.dp)
+                                .clip(CircleShape),
+                            contentScale = ContentScale.Crop
+                        )
+                    }
 
                     // Error
                     if (state.error != null) {
@@ -234,7 +250,7 @@ fun LoginScreen(
                         SignInButton(
                             onClick = { showBiometricPrompt.value = true },
                             enabled = !state.isLoading,
-                            isLoading = false,
+                            isLoading = state.isLoading,
                             label = "Continue with Biometrics",
                             leading = {
                                 Icon(

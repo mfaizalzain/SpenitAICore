@@ -63,7 +63,13 @@ fun InsightsScreen(
         containerColor = Color.Transparent,
         topBar = {
             CompactTopAppBar(
-                title = { Text("Insights") },
+                title = { 
+                    Text(
+                        "Insights",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    ) 
+                },
                 actions = {
                     IconButton(onClick = onNavigateToSharedImports) {
                         SharedImportsBadgeIcon(

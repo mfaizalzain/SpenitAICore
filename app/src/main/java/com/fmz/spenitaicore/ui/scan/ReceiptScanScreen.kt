@@ -128,7 +128,13 @@ fun ReceiptScanScreen(
     Scaffold(
         topBar = {
             CompactTopAppBar(
-                title = { Text("Add Expense") },
+                title = { 
+                    Text(
+                        "Add Expense",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    ) 
+                },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.Filled.Close, contentDescription = "Close")

@@ -51,6 +51,7 @@ val bottomNavItems = listOf(
 @Composable
 fun SpenItNavHost(
     container: AppContainer,
+    initialLoggedIn: Boolean = false,
     sharedImportSignal: Int = 0,
     navigateToImportsFlow: Flow<Unit>? = null
 ) {
@@ -61,7 +62,10 @@ fun SpenItNavHost(
     val authState by authViewModel.state.collectAsStateWithLifecycle()
 
     // Determine start destination based on auth state
-    val startDestination = if (authState.isLoggedIn) Screen.Dashboard.route else "login"
+    // Use initialLoggedIn to avoid "login flash" during initial composition
+    val startDestination = remember {
+        if (initialLoggedIn) Screen.Dashboard.route else "login"
+    }
     var pendingSharedImportNavigation by remember { mutableStateOf(sharedImportSignal > 0) }
     var sharedImportCount by remember {
         mutableIntStateOf(container.sharedImportStore.load().size)

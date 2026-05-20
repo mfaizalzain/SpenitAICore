@@ -70,7 +70,13 @@ fun IncomeScreen(
         containerColor = Color.Transparent,
         topBar = {
             CompactTopAppBar(
-                title = { Text("Income") },
+                title = { 
+                    Text(
+                        "Income",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    ) 
+                },
                 actions = {
                     IconButton(onClick = onNavigateToSharedImports) {
                         SharedImportsBadgeIcon(

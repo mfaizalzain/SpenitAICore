@@ -80,7 +80,13 @@ fun ExpensesScreen(
         containerColor = Color.Transparent,
         topBar = {
             CompactTopAppBar(
-                title = { Text("Expenses") },
+                title = { 
+                    Text(
+                        "Expenses",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    ) 
+                },
                 actions = {
                     IconButton(onClick = onNavigateToSharedImports) {
                         SharedImportsBadgeIcon(

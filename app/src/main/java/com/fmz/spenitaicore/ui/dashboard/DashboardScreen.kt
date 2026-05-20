@@ -75,14 +75,11 @@ fun DashboardScreen(
     val editingReceipt by viewModel.editingReceipt.collectAsStateWithLifecycle()
     val isBusy by viewModel.isBusy.collectAsStateWithLifecycle()
 
+    // Removed redundant quietLoad() as it is already called in ViewModel init
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showConvertConfirm by remember { mutableStateOf(false) }
     var showFabMenu by remember { mutableStateOf(false) }
     var pendingDeleteReceipt by remember { mutableStateOf<Receipt?>(null) }
-
-    LaunchedEffect(Unit) {
-        viewModel.quietLoad()
-    }
 
     var showAiCoreDialog by remember { mutableStateOf(true) }
     if (showAiCoreDialog) {
@@ -195,7 +192,16 @@ fun DashboardScreen(
             }
 
             // Receipts list
-            if (recentReceipts.isEmpty()) {
+            if (isRefreshing && recentReceipts.isEmpty()) {
+                item {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().padding(32.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator()
+                    }
+                }
+            } else if (recentReceipts.isEmpty()) {
                 item {
                     Card(
                         modifier = Modifier.fillMaxWidth(),

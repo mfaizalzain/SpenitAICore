@@ -72,7 +72,13 @@ fun TaxReliefScreen(
         containerColor = Color.Transparent,
         topBar = {
             CompactTopAppBar(
-                title = { Text("Tax Relief") },
+                title = { 
+                    Text(
+                        "Tax Relief",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    ) 
+                },
                 actions = {
                     IconButton(onClick = onNavigateToSharedImports) {
                         SharedImportsBadgeIcon(
