@@ -13,8 +13,8 @@ android {
         applicationId = "com.fmz.spenitaicore"
         minSdk = 31
         targetSdk = 35
-        versionCode = 19
-        versionName = "1.2.2"
+        versionCode = 20
+        versionName = "1.2.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
