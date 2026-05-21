@@ -149,7 +149,12 @@ class AiCoreService(
     }
 
     /** Try remote AI for bank statement extraction across multiple pages. */
-    private suspend fun tryRemoteBankStatement(bitmaps: List<Bitmap>): BankStatementResult? {
+    private suspend fun tryRemoteBankStatement(
+        imagePath: String,
+        isPdf: Boolean,
+        renderer: PdfRenderer?,
+        pageCount: Int
+    ): BankStatementResult? {
         if (!isRemoteConfigured() || !remoteAiService.isOnline()) {
             Log.d(TAG, "Remote AI not configured or offline, skipping bank statement remote path")
             return null
@@ -194,27 +199,36 @@ Return format only (strict JSON, no markdown):
         var accountLast4 = ""
         var period = ""
 
-        for ((index, bitmap) in bitmaps.withIndex()) {
-            Log.d(TAG, "Remote AI bank statement page ${index + 1}/${bitmaps.size}")
-            val response = remoteAiService.sendVisionRequest(provider, key, model, bitmap, prompt, customUrl)
-            if (response == null) {
-                Log.w(TAG, "Remote AI returned null for page ${index + 1}")
+        for (i in 0 until pageCount) {
+            Log.d(TAG, "Remote AI bank statement page ${i + 1}/$pageCount")
+            val bitmap = getPageBitmap(imagePath, isPdf, renderer, i)
+            if (bitmap == null) {
+                Log.w(TAG, "Could not render or load page ${i + 1}")
                 continue
             }
-            Log.d(TAG, "Remote AI page ${index + 1} response: ${response.take(300)}")
-
             try {
-                val root = json.parseToJsonElement(response).jsonObject
-                val transactions = root.arrayValue("transactions", "transaction", "entries", "rows", "items", "statementLines")
-                if (transactions != null) {
-                    allTransactions += transactions.mapNotNull { (it as? JsonObject)?.toBankTransaction() }
-                        .filter { it.amount != 0.0 }
+                val response = remoteAiService.sendVisionRequest(provider, key, model, bitmap, prompt, customUrl)
+                if (response == null) {
+                    Log.w(TAG, "Remote AI returned null for page ${i + 1}")
+                    continue
                 }
-                if (bankName.isEmpty()) bankName = root.stringValue("bankName", "bank name", "bank")
-                if (accountLast4.isEmpty()) accountLast4 = root.stringValue("accountLast4", "account last 4", "accountNumber", "account number")
-                if (period.isEmpty()) period = root.stringValue("period", "statementPeriod", "statement period")
-            } catch (e: Exception) {
-                Log.w(TAG, "Failed to parse remote AI page ${index + 1}", e)
+                Log.d(TAG, "Remote AI page ${i + 1} response: ${response.take(300)}")
+
+                try {
+                    val root = json.parseToJsonElement(response).jsonObject
+                    val transactions = root.arrayValue("transactions", "transaction", "entries", "rows", "items", "statementLines")
+                    if (transactions != null) {
+                        allTransactions += transactions.mapNotNull { (it as? JsonObject)?.toBankTransaction() }
+                            .filter { it.amount != 0.0 }
+                    }
+                    if (bankName.isEmpty()) bankName = root.stringValue("bankName", "bank name", "bank")
+                    if (accountLast4.isEmpty()) accountLast4 = root.stringValue("accountLast4", "account last 4", "accountNumber", "account number")
+                    if (period.isEmpty()) period = root.stringValue("period", "statementPeriod", "statement period")
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to parse remote AI page ${i + 1}", e)
+                }
+            } finally {
+                bitmap.recycle()
             }
         }
 
@@ -515,48 +529,101 @@ Rules:
     ): BankStatementResult {
         Log.d("AiCoreService", "Starting bank statement extraction for: $imagePath")
 
-        val bitmaps: List<Bitmap> = withContext(Dispatchers.IO) {
-            if (isPdfInput(imagePath)) loadPdfPages(imagePath)
-            else loadImageBitmap(imagePath)?.let { listOf(it) } ?: emptyList()
-        }
-        if (bitmaps.isEmpty()) {
-            Log.w("AiCoreService", "No bitmaps loaded from $imagePath")
-            return BankStatementResult(errorMessage = "Could not load image. File may be unsupported or corrupted.")
-        }
+        val isPdf = isPdfInput(imagePath)
+        var pdfRenderer: PdfRenderer? = null
+        var fileDescriptor: ParcelFileDescriptor? = null
+        var pageCount = 0
 
-        // ── Remote AI path (if API key configured + online) ─────────────
-        val remoteResult = tryRemoteBankStatement(bitmaps)
-        if (remoteResult != null) {
-            Log.d(TAG, "Remote AI returned ${remoteResult.transactions.size} transactions for bank statement")
-            if (remoteResult.transactions.size >= 3) {
-                return remoteResult
+        try {
+            withContext(Dispatchers.IO) {
+                if (isPdf) {
+                    try {
+                        fileDescriptor = when {
+                            imagePath.startsWith("content://") ->
+                                context.contentResolver.openFileDescriptor(Uri.parse(imagePath), "r")
+                            imagePath.startsWith("file://") -> {
+                                val path = Uri.parse(imagePath).path
+                                if (path != null) ParcelFileDescriptor.open(java.io.File(path), ParcelFileDescriptor.MODE_READ_ONLY) else null
+                            }
+                            else -> ParcelFileDescriptor.open(java.io.File(imagePath), ParcelFileDescriptor.MODE_READ_ONLY)
+                        }
+                        val fd = fileDescriptor
+                        if (fd != null) {
+                            val renderer = PdfRenderer(fd)
+                            pdfRenderer = renderer
+                            pageCount = minOf(renderer.pageCount, 20)
+                        }
+                    } catch (e: Exception) {
+                        Log.e("AiCoreService", "Failed to open PDF renderer for $imagePath", e)
+                    }
+                } else {
+                    val testBitmap = loadImageBitmap(imagePath)
+                    if (testBitmap != null) {
+                        pageCount = 1
+                        testBitmap.recycle()
+                    }
+                }
             }
-            // If remote found too few, fall through to OCR
-        }
 
-        // ── If remote AI is configured but offline/failed → try OCR directly ─
-        // Gemini Nano AI is skipped for bank statements because its output context
-        // is too limited to return complete transaction data, even for one page.
-        // ML Kit OCR + regex is less accurate but more reliable for this use case.
-        Log.d("AiCoreService", "Remote AI not available — using ML Kit OCR + regex for bank statement")
-        val textTransactions = mutableListOf<BankTransaction>()
-        for ((index, bitmap) in bitmaps.withIndex()) {
-            Log.d("AiCoreService", "OCR page ${index + 1}/${bitmaps.size}")
-            val lines = BankStatementParser.extractLines(bitmap)
-            Log.d("AiCoreService", "OCR page ${index + 1}: ${lines.size} lines extracted")
-            textTransactions += BankStatementParser.parseLines(lines)
-        }
-        val textDeduped = textTransactions.distinctBy { "${it.date}|${it.amount}|${it.description.take(40)}" }
-        Log.d("AiCoreService", "OCR+regex: ${textDeduped.size} transactions found")
+            if (pageCount == 0) {
+                Log.w("AiCoreService", "No pages or valid image loaded from $imagePath")
+                return BankStatementResult(errorMessage = "Could not load image/PDF. File may be unsupported or corrupted.")
+            }
 
-        val hintMessage = if (!isRemoteConfigured()) {
-            "Tip: Configure an AI API key in Settings for more accurate bank statement extraction."
-        } else null
+            // ── Remote AI path (if API key configured + online) ─────────────
+            val remoteResult = tryRemoteBankStatement(imagePath, isPdf, pdfRenderer, pageCount)
+            if (remoteResult != null) {
+                Log.d(TAG, "Remote AI returned ${remoteResult.transactions.size} transactions for bank statement")
+                if (remoteResult.transactions.size >= 3) {
+                    return remoteResult
+                }
+                // If remote found too few, fall through to OCR
+            }
 
-        if (textDeduped.isNotEmpty()) {
-            return BankStatementResult(transactions = textDeduped, hintMessage = hintMessage)
-        } else {
-            return BankStatementResult(errorMessage = "Could not extract transactions. Try a clearer image or different file.")
+            // ── If remote AI is configured but offline/failed → try OCR directly ─
+            // Gemini Nano AI is skipped for bank statements because its output context
+            // is too limited to return complete transaction data, even for one page.
+            // ML Kit OCR + regex is less accurate but more reliable for this use case.
+            Log.d("AiCoreService", "Remote AI not available — using ML Kit OCR + regex for bank statement")
+            val textTransactions = mutableListOf<BankTransaction>()
+            for (i in 0 until pageCount) {
+                Log.d("AiCoreService", "OCR page ${i + 1}/$pageCount")
+                val bitmap = getPageBitmap(imagePath, isPdf, pdfRenderer, i)
+                if (bitmap != null) {
+                    try {
+                        val lines = BankStatementParser.extractLines(bitmap)
+                        Log.d("AiCoreService", "OCR page ${i + 1}: ${lines.size} lines extracted")
+                        textTransactions += BankStatementParser.parseLines(lines)
+                    } finally {
+                        bitmap.recycle()
+                    }
+                }
+            }
+            val textDeduped = textTransactions.distinctBy { "${it.date}|${it.amount}|${it.description.take(40)}" }
+            Log.d("AiCoreService", "OCR+regex: ${textDeduped.size} transactions found")
+
+            val hintMessage = if (!isRemoteConfigured()) {
+                "Tip: Configure an AI API key in Settings for more accurate bank statement extraction."
+            } else null
+
+            if (textDeduped.isNotEmpty()) {
+                return BankStatementResult(transactions = textDeduped, hintMessage = hintMessage)
+            } else {
+                return BankStatementResult(errorMessage = "Could not extract transactions. Try a clearer image or different file.")
+            }
+        } finally {
+            withContext(Dispatchers.IO) {
+                try {
+                    pdfRenderer?.close()
+                } catch (e: Exception) {
+                    Log.e("AiCoreService", "Error closing PdfRenderer", e)
+                }
+                try {
+                    fileDescriptor?.close()
+                } catch (e: Exception) {
+                    Log.e("AiCoreService", "Error closing FileDescriptor", e)
+                }
+            }
         }
     }
 
@@ -677,38 +744,29 @@ Rules:
         }
     }
 
-    private fun loadPdfPages(pdfPath: String): List<Bitmap> {
-        val pages = mutableListOf<Bitmap>()
-        return try {
-            val fd = when {
-                pdfPath.startsWith("content://") ->
-                    context.contentResolver.openFileDescriptor(Uri.parse(pdfPath), "r") ?: return emptyList()
-                pdfPath.startsWith("file://") -> {
-                    val path = Uri.parse(pdfPath).path ?: return emptyList()
-                    ParcelFileDescriptor.open(java.io.File(path), ParcelFileDescriptor.MODE_READ_ONLY)
-                }
-                else -> ParcelFileDescriptor.open(java.io.File(pdfPath), ParcelFileDescriptor.MODE_READ_ONLY)
-            }
-            val renderer = PdfRenderer(fd)
-            val pageCount = minOf(renderer.pageCount, 20)
-            for (i in 0 until pageCount) {
-                val page = renderer.openPage(i)
-                val maxDim = maxOf(page.width, page.height).coerceAtLeast(1)
-                val scale = (2048f / maxDim).coerceIn(1f, 3f)
-                val width = (page.width * scale).toInt().coerceAtLeast(1)
-                val height = (page.height * scale).toInt().coerceAtLeast(1)
-                val bm = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-                Canvas(bm).drawColor(Color.WHITE)
-                page.render(bm, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-                page.close()
-                pages += bm
-            }
-            renderer.close()
-            fd.close()
-            pages
-        } catch (e: Exception) {
-            Log.e("AiCoreService", "PDF pages load error", e)
-            pages
+    private fun renderPdfPage(renderer: PdfRenderer, pageIndex: Int): Bitmap {
+        val page = renderer.openPage(pageIndex)
+        val maxDim = maxOf(page.width, page.height).coerceAtLeast(1)
+        val scale = (2048f / maxDim).coerceIn(1f, 3f)
+        val width = (page.width * scale).toInt().coerceAtLeast(1)
+        val height = (page.height * scale).toInt().coerceAtLeast(1)
+        val bm = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        Canvas(bm).drawColor(Color.WHITE)
+        page.render(bm, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+        page.close()
+        return bm
+    }
+
+    private fun getPageBitmap(
+        imagePath: String,
+        isPdf: Boolean,
+        renderer: PdfRenderer?,
+        index: Int
+    ): Bitmap? {
+        return if (isPdf) {
+            if (renderer != null) renderPdfPage(renderer, index) else null
+        } else {
+            loadImageBitmap(imagePath)
         }
     }
 

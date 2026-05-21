@@ -10,6 +10,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -58,7 +61,7 @@ fun SpenItNavHost(
     val navController = rememberNavController()
 
     // Auth state
-    val authViewModel = remember { AuthViewModel() }
+    val authViewModel: AuthViewModel = viewModel()
     val authState by authViewModel.state.collectAsStateWithLifecycle()
 
     // Determine start destination based on auth state
@@ -97,11 +100,11 @@ fun SpenItNavHost(
     }
 
     // Create ViewModels (scoped to the NavHost)
-    val dashboardViewModel = remember { DashboardViewModel() }
-    val expensesViewModel = remember { ExpensesViewModel() }
-    val incomeViewModel = remember { IncomeViewModel() }
-    val insightsViewModel = remember { InsightsViewModel() }
-    val settingsViewModel = remember { SettingsViewModel() }
+    val dashboardViewModel: DashboardViewModel = viewModel()
+    val expensesViewModel: ExpensesViewModel = viewModel()
+    val incomeViewModel: IncomeViewModel = viewModel()
+    val insightsViewModel: InsightsViewModel = viewModel()
+    val settingsViewModel: SettingsViewModel = viewModel()
 
     // Don't show bottom bar on login screen
     val navBackStackEntry by navController.currentBackStackEntryAsState()
@@ -199,7 +202,7 @@ fun SpenItNavHost(
             }
 
             composable(Screen.TaxRelief.route) {
-                val taxReliefViewModel = remember { TaxReliefViewModel() }
+                val taxReliefViewModel: TaxReliefViewModel = viewModel()
                 TaxReliefScreen(
                     viewModel = taxReliefViewModel,
                     onNavigateToSharedImports = { navController.navigate("shared_imports") },
@@ -234,7 +237,7 @@ fun SpenItNavHost(
                 )
             ) { backStackEntry ->
                 val receiptId = backStackEntry.arguments?.getInt("receiptId") ?: 0
-                val scanViewModel = remember { ReceiptScanViewModel() }
+                val scanViewModel: ReceiptScanViewModel = viewModel()
                 if (receiptId > 0) {
                     LaunchedEffect(receiptId) {
                         scanViewModel.prepareEdit(receiptId)
@@ -256,7 +259,13 @@ fun SpenItNavHost(
                 )
             ) { backStackEntry ->
                 val incomeEntryId = backStackEntry.arguments?.getInt("incomeEntryId") ?: 0
-                val scanViewModel = remember { ReceiptScanViewModel(isIncome = true) }
+                val scanViewModel: ReceiptScanViewModel = viewModel(
+                    factory = viewModelFactory {
+                        initializer {
+                            ReceiptScanViewModel(isIncome = true)
+                        }
+                    }
+                )
                 if (incomeEntryId > 0) {
                     LaunchedEffect(incomeEntryId) {
                         scanViewModel.prepareEdit(incomeEntryId)
@@ -269,7 +278,7 @@ fun SpenItNavHost(
             }
 
             composable("shared_imports") {
-                val sharedImportsViewModel = remember { SharedImportsViewModel() }
+                val sharedImportsViewModel: SharedImportsViewModel = viewModel()
                 SharedImportsScreen(
                     viewModel = sharedImportsViewModel,
                     pendingImportSignal = sharedImportSignal,

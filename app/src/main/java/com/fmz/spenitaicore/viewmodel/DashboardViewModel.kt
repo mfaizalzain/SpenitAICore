@@ -11,8 +11,11 @@ import com.fmz.spenitaicore.data.db.entity.IncomeEntry
 import com.fmz.spenitaicore.util.CurrencyFormatter
 import com.fmz.spenitaicore.util.DateUtils
 import com.fmz.spenitaicore.util.SalaryCycle
+import com.fmz.spenitaicore.util.SalaryCyclePeriod
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 
@@ -119,7 +122,7 @@ class DashboardViewModel : ViewModel() {
 
     init {
         observeGreeting()
-        loadData()
+        observeDataPipeline()
     }
 
     private fun observeGreeting() {
@@ -154,7 +157,7 @@ class DashboardViewModel : ViewModel() {
         viewModelScope.launch {
             _isRefreshing.value = true
             try {
-                fetchData()
+                kotlinx.coroutines.delay(500)
             } finally {
                 _isRefreshing.value = false
             }
@@ -162,106 +165,170 @@ class DashboardViewModel : ViewModel() {
     }
 
     fun quietLoad() {
+        // No-op: handled reactively by flow observation
+    }
+
+    private fun observeDataPipeline() {
+        val now = LocalDate.now()
+        val cutoff = now.minusMonths(6)
+        val cutoffStr = DateUtils.fromLocalDate(cutoff)
+
         viewModelScope.launch {
-            try {
-                fetchData()
-            } catch (_: Exception) { }
+            _isRefreshing.value = true
+            combine(
+                receiptRepo.getReceiptsFrom(cutoffStr),
+                incomeRepo.getIncomeEntriesFrom(cutoffStr)
+            ) { receipts, income ->
+                val currency = preferences.getDefaultCurrency()
+                val payDay = preferences.getSalaryPayDay()
+                val cycle = SalaryCycle.getCurrentPeriod(payDay, now)
+                val metrics = computeMetrics(receipts, income, now, cycle)
+                PipelineData(
+                    metrics = metrics,
+                    allReceipts = receipts,
+                    allIncome = income,
+                    currency = currency,
+                    cycle = cycle,
+                    now = now
+                )
+            }
+            .flowOn(Dispatchers.Default)
+            .catch { _ ->
+                _isRefreshing.value = false
+            }
+            .collect { data ->
+                updateStateFlows(data)
+                _isRefreshing.value = false
+            }
         }
     }
 
-    private suspend fun fetchData() {
-        val currency = preferences.getDefaultCurrency()
-        val payDay = preferences.getSalaryPayDay()
-        val now = LocalDate.now()
-        val cycle = SalaryCycle.getCurrentPeriod(payDay, now)
-
-        val cutoff = now.minusMonths(6)
-        val cutoffStr = DateUtils.fromLocalDate(cutoff)
-        val allReceipts = receiptRepo.getReceiptsFromSync(cutoffStr)
-
-        val thisCycleCost = allReceipts.filter { r ->
-            val d = DateUtils.toLocalDate(r.date)
-            SalaryCycle.isInPeriod(d, cycle)
-        }.sumOf { it.total }
-        val lastCycleCost = allReceipts.filter { r ->
-            val d = DateUtils.toLocalDate(r.date)
-            !d.isBefore(cycle.previousStart) && !d.isAfter(cycle.previousEnd)
-        }.sumOf { it.total }
+    private fun computeMetrics(
+        allReceipts: List<Receipt>,
+        allIncome: List<IncomeEntry>,
+        now: LocalDate,
+        cycle: SalaryCyclePeriod
+    ): DashboardMetrics {
+        var todayTotal = 0.0
+        var weekTotal = 0.0
+        var thisCycleCost = 0.0
+        var lastCycleCost = 0.0
+        var taxTotal = 0.0
 
         val todayDate = DateUtils.fromLocalDate(now)
-        val todayTotal = allReceipts.filter { it.date == todayDate }.sumOf { it.total }
         val weekStart = DateUtils.startOfWeek()
-        val weekTotal = allReceipts.filter { it.date >= weekStart && it.date <= todayDate }.sumOf { it.total }
-
         val thisYear = now.year.toString()
-        val taxTotal = allReceipts.filter { it.isTaxDeductible && (it.taxYear == thisYear || it.date.startsWith(thisYear)) }.sumOf { it.total }
+
+        for (r in allReceipts) {
+            val d = DateUtils.toLocalDate(r.date)
+            if (SalaryCycle.isInPeriod(d, cycle)) {
+                thisCycleCost += r.total
+            }
+            if (!d.isBefore(cycle.previousStart) && !d.isAfter(cycle.previousEnd)) {
+                lastCycleCost += r.total
+            }
+            if (r.date == todayDate) {
+                todayTotal += r.total
+            }
+            if (r.date >= weekStart && r.date <= todayDate) {
+                weekTotal += r.total
+            }
+            if (r.isTaxDeductible && (r.taxYear == thisYear || r.date.startsWith(thisYear))) {
+                taxTotal += r.total
+            }
+        }
+
+        var thisCycleIncome = 0.0
+        for (e in allIncome) {
+            val d = DateUtils.toLocalDate(e.date)
+            if (SalaryCycle.isInPeriod(d, cycle)) {
+                thisCycleIncome += e.amount
+            }
+        }
+
+        val recent = allReceipts
+            .sortedWith(compareByDescending<Receipt> { it.date }.thenByDescending { it.createdAt })
+            .take(5)
+
+        return DashboardMetrics(
+            todayTotal = todayTotal,
+            weekTotal = weekTotal,
+            thisCycleCost = thisCycleCost,
+            lastCycleCost = lastCycleCost,
+            taxTotal = taxTotal,
+            thisCycleIncome = thisCycleIncome,
+            recentReceipts = recent
+        )
+    }
+
+    private fun updateStateFlows(data: PipelineData) {
+        val metrics = data.metrics
+        val currency = data.currency
+        val cycle = data.cycle
+        val now = data.now
 
         val cycleDaysElapsed = maxOf(1, ChronoUnit.DAYS.between(cycle.start, now).toInt() + 1)
-        val avgDaily = thisCycleCost / cycleDaysElapsed
+        val avgDaily = metrics.thisCycleCost / cycleDaysElapsed
 
-        val allIncome = incomeRepo.getIncomeEntriesFromSync(cutoffStr)
-        val thisCycleIncome = allIncome.filter { e ->
-            val d = DateUtils.toLocalDate(e.date)
-            SalaryCycle.isInPeriod(d, cycle)
-        }.sumOf { it.amount }
-
-        _totalToday.value = todayTotal
-        _totalThisWeek.value = weekTotal
-        _totalThisMonth.value = thisCycleCost
-        _totalLastMonth.value = lastCycleCost
-        _taxDeductibleTotal.value = taxTotal
+        _totalToday.value = metrics.todayTotal
+        _totalThisWeek.value = metrics.weekTotal
+        _totalThisMonth.value = metrics.thisCycleCost
+        _totalLastMonth.value = metrics.lastCycleCost
+        _taxDeductibleTotal.value = metrics.taxTotal
         _averageDailySpend.value = avgDaily
-        _totalIncomeThisMonth.value = thisCycleIncome
+        _totalIncomeThisMonth.value = metrics.thisCycleIncome
 
-        _totalTodayText.value = CurrencyFormatter.format(todayTotal, currency)
-        _totalThisWeekText.value = CurrencyFormatter.format(weekTotal, currency)
-        _totalThisMonthText.value = CurrencyFormatter.format(thisCycleCost, currency)
-        _totalLastMonthText.value = CurrencyFormatter.format(lastCycleCost, currency)
-        _taxDeductibleTotalText.value = CurrencyFormatter.formatInt(taxTotal, currency)
+        _totalTodayText.value = CurrencyFormatter.format(metrics.todayTotal, currency)
+        _totalThisWeekText.value = CurrencyFormatter.format(metrics.weekTotal, currency)
+        _totalThisMonthText.value = CurrencyFormatter.format(metrics.thisCycleCost, currency)
+        _totalLastMonthText.value = CurrencyFormatter.format(metrics.lastCycleCost, currency)
+        _taxDeductibleTotalText.value = CurrencyFormatter.formatInt(metrics.taxTotal, currency)
         _averageDailySpendText.value = CurrencyFormatter.format(avgDaily, currency)
-        _totalIncomeThisMonthText.value = CurrencyFormatter.format(thisCycleIncome, currency)
+        _totalIncomeThisMonthText.value = CurrencyFormatter.format(metrics.thisCycleIncome, currency)
 
-        _isSpendingUp.value = lastCycleCost > 0 && thisCycleCost >= lastCycleCost
-        _monthOverMonthText.value = if (lastCycleCost == 0.0) {
+        _isSpendingUp.value = metrics.lastCycleCost > 0 && metrics.thisCycleCost >= metrics.lastCycleCost
+        _monthOverMonthText.value = if (metrics.lastCycleCost == 0.0) {
             "New cycle"
         } else {
-            val arrow = if (thisCycleCost >= lastCycleCost) "\u2191" else "\u2193"
-            val pct = kotlin.math.abs((thisCycleCost - lastCycleCost) / lastCycleCost * 100)
+            val arrow = if (metrics.thisCycleCost >= metrics.lastCycleCost) "\u2191" else "\u2193"
+            val pct = kotlin.math.abs((metrics.thisCycleCost - metrics.lastCycleCost) / metrics.lastCycleCost * 100)
             "$arrow ${"%.0f".format(pct)}%"
         }
 
-        val safeToSpend = thisCycleIncome - thisCycleCost
+        val safeToSpend = metrics.thisCycleIncome - metrics.thisCycleCost
         _safeToSpendText.value = CurrencyFormatter.format(safeToSpend, currency)
-        updateFinancialStatus(safeToSpend, thisCycleIncome)
-        _dashboardStoryText.value = if (thisCycleIncome > 0) {
-            "Income ${CurrencyFormatter.format(thisCycleIncome, currency)} \u00B7 Daily avg ${CurrencyFormatter.format(avgDaily, currency)}"
+        updateFinancialStatus(safeToSpend, metrics.thisCycleIncome)
+        _dashboardStoryText.value = if (metrics.thisCycleIncome > 0) {
+            "Income ${CurrencyFormatter.format(metrics.thisCycleIncome, currency)} \u00B7 Daily avg ${CurrencyFormatter.format(avgDaily, currency)}"
         } else {
-            "Daily avg ${CurrencyFormatter.format(avgDaily, currency)} \u00B7 Tax ${CurrencyFormatter.formatInt(taxTotal, currency)}"
+            "Daily avg ${CurrencyFormatter.format(avgDaily, currency)} \u00B7 Tax ${CurrencyFormatter.formatInt(metrics.taxTotal, currency)}"
         }
 
-        _recentReceipts.value = allReceipts
-            .sortedWith(compareByDescending<com.fmz.spenitaicore.data.db.entity.Receipt> { it.date }
-                .thenByDescending { it.createdAt })
-            .take(5)
+        _recentReceipts.value = metrics.recentReceipts
 
-        // Generate AI insights in background so we don't block the initial UI load
+        // Generate AI insights asynchronously in background
         viewModelScope.launch {
             try {
-                val insightResult = aiCore.generateInsights(
-                    receipts = allReceipts.filter {
+                val filteredData = withContext(Dispatchers.Default) {
+                    val filteredReceipts = data.allReceipts.filter {
                         val d = DateUtils.toLocalDate(it.date)
                         SalaryCycle.isInPeriod(d, cycle)
-                    },
-                    incomeEntries = allIncome.filter { e ->
+                    }
+                    val filteredIncome = data.allIncome.filter { e ->
                         val d = DateUtils.toLocalDate(e.date)
                         SalaryCycle.isInPeriod(d, cycle)
-                    },
+                    }
+                    Pair(filteredReceipts, filteredIncome)
+                }
+                val insightResult = aiCore.generateInsights(
+                    receipts = filteredData.first,
+                    incomeEntries = filteredData.second,
                     periodLabel = "this cycle",
                     currency = currency,
                     periodStart = DateUtils.fromLocalDate(cycle.start),
                     periodEnd = DateUtils.fromLocalDate(cycle.end)
                 )
-                _latestInsightSummary.value = insightResult.summary ?: ""
+                _latestInsightSummary.value = insightResult.summary
                 _latestInsightFinding.value = insightResult.keyFindings.firstOrNull() ?: ""
             } catch (_: Exception) { }
         }
@@ -335,7 +402,6 @@ class DashboardViewModel : ViewModel() {
             receiptRepo.saveReceipt(updated)
             _isEditVisible.value = false
             _editingReceipt.value = null
-            loadData()
         }
     }
 
@@ -343,7 +409,6 @@ class DashboardViewModel : ViewModel() {
         viewModelScope.launch {
             _isBusy.value = true
             receiptRepo.deleteReceipt(receipt)
-            fetchData()
             _isBusy.value = false
         }
     }
@@ -363,7 +428,6 @@ class DashboardViewModel : ViewModel() {
                 )
                 incomeRepo.saveIncomeEntry(entry)
                 dismissDetail()
-                loadData()
             } finally {
                 _isBusy.value = false
             }
@@ -374,3 +438,22 @@ class DashboardViewModel : ViewModel() {
         _isRefreshing.value = value
     }
 }
+
+private data class DashboardMetrics(
+    val todayTotal: Double,
+    val weekTotal: Double,
+    val thisCycleCost: Double,
+    val lastCycleCost: Double,
+    val taxTotal: Double,
+    val thisCycleIncome: Double,
+    val recentReceipts: List<Receipt>
+)
+
+private data class PipelineData(
+    val metrics: DashboardMetrics,
+    val allReceipts: List<Receipt>,
+    val allIncome: List<IncomeEntry>,
+    val currency: String,
+    val cycle: SalaryCyclePeriod,
+    val now: LocalDate
+)

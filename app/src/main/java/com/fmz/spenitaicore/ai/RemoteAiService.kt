@@ -237,7 +237,7 @@ class RemoteAiService(private val context: Context) {
             putJsonArray("messages") {
                 addJsonObject {
                     put("role", "user")
-                    put("text", prompt)
+                    put("content", prompt)
                 }
             }
             put("max_tokens", 4096)
