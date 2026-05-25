@@ -13,7 +13,7 @@ interface IncomeEntryDao {
     @Query("SELECT * FROM IncomeEntries WHERE date >= :from ORDER BY date DESC, created_at DESC")
     fun getIncomeEntriesFrom(from: String): Flow<List<IncomeEntry>>
 
-    @Query("SELECT * FROM IncomeEntries WHERE date >= :from")
+    @Query("SELECT * FROM IncomeEntries WHERE date >= :from ORDER BY date DESC, created_at DESC")
     suspend fun getIncomeEntriesFromSync(from: String?): List<IncomeEntry>
 
     @Query("SELECT * FROM IncomeEntries ORDER BY date DESC, created_at DESC")
