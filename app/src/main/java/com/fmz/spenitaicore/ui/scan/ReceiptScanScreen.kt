@@ -33,6 +33,7 @@ import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.fmz.spenitaicore.data.db.entity.ReceiptItem
+import com.fmz.spenitaicore.R
 import com.fmz.spenitaicore.ui.components.CompactTopAppBar
 import com.fmz.spenitaicore.ui.components.DatePickerField
 import com.fmz.spenitaicore.viewmodel.ExpensesViewModel
@@ -61,6 +62,7 @@ fun ReceiptScanScreen(
     val items by viewModel.items.collectAsStateWithLifecycle()
     val isProcessing by viewModel.isProcessing.collectAsStateWithLifecycle()
     val isBusy by viewModel.isBusy.collectAsStateWithLifecycle()
+    val pdfPasswordError by viewModel.pdfPasswordError.collectAsStateWithLifecycle()
 
     val context = LocalContext.current
     var showCategoryDropdown by remember { mutableStateOf(false) }
@@ -125,6 +127,13 @@ fun ReceiptScanScreen(
                 )
             } catch (_: Exception) { }
             viewModel.setImageUri(it)
+        }
+    }
+
+    LaunchedEffect(pdfPasswordError) {
+        if (pdfPasswordError) {
+            Toast.makeText(context, context.getString(R.string.pdf_password_protected), Toast.LENGTH_LONG).show()
+            viewModel.dismissPdfPasswordError()
         }
     }
 

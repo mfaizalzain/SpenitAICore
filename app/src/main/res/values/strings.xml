@@ -35,6 +35,7 @@
     <string name="no_income">No income entries</string>
     <string name="no_imports">No files to import</string>
     <string name="no_imports_description">Add files to scan and process them</string>
+    <string name="pdf_password_protected">File is password protected. Please remove encryption</string>
 
     <string name="search_expenses">Search expenses… (tax 2024, >500, #groceries)</string>
     <string name="edit_expense">Edit Expense</string>

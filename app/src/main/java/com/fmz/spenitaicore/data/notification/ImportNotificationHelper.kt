@@ -62,6 +62,15 @@ object ImportNotificationHelper {
         )
     }
 
+    fun showPasswordProtected(context: Context, displayName: String) {
+        show(
+            context = context,
+            title = "Password Protected — $displayName",
+            text = "This PDF is encrypted and cannot be processed. Remove the password and try again.",
+            pendingIntent = importsIntent(context)
+        )
+    }
+
     private fun show(
         context: Context,
         title: String,

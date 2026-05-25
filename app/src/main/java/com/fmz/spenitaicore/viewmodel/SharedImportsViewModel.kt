@@ -17,6 +17,7 @@ import com.fmz.spenitaicore.data.notification.ImportNotificationHelper
 import com.fmz.spenitaicore.util.DateUtils
 import com.fmz.spenitaicore.util.PendingSharedFiles
 import com.fmz.spenitaicore.util.FileUtils
+import com.fmz.spenitaicore.R
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -141,6 +142,18 @@ class SharedImportsViewModel : ViewModel() {
             })
 
             items.forEach { item ->
+                val isPdf = item.filePath.lowercase().endsWith(".pdf")
+                if (isPdf && FileUtils.isPdfPasswordProtected(appContext, item.filePath)) {
+                    setImports(_imports.value.map {
+                        if (it.id == item.id) it.copy(
+                            status = SharedImportStatus.Failed,
+                            statusMessage = appContext.getString(R.string.pdf_password_protected)
+                        ) else it
+                    })
+                    notifyImportResult(item.id, item.displayName)
+                    return@forEach
+                }
+
                 setImports(_imports.value.map {
                     if (it.id == item.id) it.copy(
                         status = SharedImportStatus.Processing,
@@ -229,14 +242,15 @@ class SharedImportsViewModel : ViewModel() {
 
     private fun notifyImportResult(itemId: String, displayName: String) {
         val item = _imports.value.firstOrNull { it.id == itemId } ?: return
-        when (item.status) {
-            SharedImportStatus.Completed ->
+        when {
+            item.status == SharedImportStatus.Completed ->
                 ImportNotificationHelper.showSuccess(appContext, displayName, item.statusMessage ?: "")
-            SharedImportStatus.Failed ->
+            item.statusMessage == appContext.getString(R.string.pdf_password_protected) ->
+                ImportNotificationHelper.showPasswordProtected(appContext, displayName)
+            item.status == SharedImportStatus.Failed ->
                 ImportNotificationHelper.showFailed(appContext, displayName, item.statusMessage ?: "")
-            SharedImportStatus.Duplicate ->
+            item.status == SharedImportStatus.Duplicate ->
                 ImportNotificationHelper.showDuplicate(appContext, displayName)
-            else -> {}
         }
     }
 

@@ -1,8 +1,11 @@
 package com.fmz.spenitaicore.util
 
 import android.content.Context
+import android.graphics.pdf.PdfRenderer
 import android.net.Uri
+import android.os.ParcelFileDescriptor
 import android.provider.OpenableColumns
+import android.util.Log
 import java.io.File
 
 object FileUtils {
@@ -66,6 +69,35 @@ object FileUtils {
         } catch (e: Exception) {
             e.printStackTrace()
             null
+        }
+    }
+
+    /**
+     * Checks if a PDF file is password-protected by attempting to open it with PdfRenderer.
+     * Returns true if a SecurityException is thrown, indicating the PDF requires a password.
+     */
+    fun isPdfPasswordProtected(context: Context, filePath: String): Boolean {
+        return try {
+            val fd: ParcelFileDescriptor = if (filePath.startsWith("content://")) {
+                context.contentResolver.openFileDescriptor(Uri.parse(filePath), "r") ?: return false
+            } else if (filePath.startsWith("file://")) {
+                val path = Uri.parse(filePath).path ?: return false
+                ParcelFileDescriptor.open(File(path), ParcelFileDescriptor.MODE_READ_ONLY)
+            } else {
+                ParcelFileDescriptor.open(File(filePath), ParcelFileDescriptor.MODE_READ_ONLY)
+            }
+            try {
+                val renderer = PdfRenderer(fd)
+                renderer.close()
+                false
+            } catch (e: SecurityException) {
+                Log.w("FileUtils", "PDF is password-protected: $filePath")
+                true
+            } finally {
+                try { fd.close() } catch (_: Exception) {}
+            }
+        } catch (e: Exception) {
+            false
         }
     }
 

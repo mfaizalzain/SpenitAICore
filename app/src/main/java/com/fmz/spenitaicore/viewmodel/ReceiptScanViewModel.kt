@@ -9,6 +9,7 @@ import com.fmz.spenitaicore.data.db.entity.Receipt
 import com.fmz.spenitaicore.data.db.entity.ReceiptItem
 import com.fmz.spenitaicore.util.CategorySuggestionService
 import com.fmz.spenitaicore.util.DateUtils
+import com.fmz.spenitaicore.util.FileUtils
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
@@ -70,6 +71,13 @@ class ReceiptScanViewModel(
     private val _isBusy = MutableStateFlow(false)
     val isBusy: StateFlow<Boolean> = _isBusy
 
+    private val _pdfPasswordError = MutableStateFlow(false)
+    val pdfPasswordError: StateFlow<Boolean> = _pdfPasswordError
+
+    fun dismissPdfPasswordError() {
+        _pdfPasswordError.value = false
+    }
+
     private var editReceiptId = 0
 
     val isEditing: Boolean get() = editReceiptId > 0
@@ -91,6 +99,7 @@ class ReceiptScanViewModel(
 
     fun setImageUri(uri: Uri) {
         try {
+            _pdfPasswordError.value = false
             val context = SpenItApp.instance
             val imagesDir = java.io.File(context.filesDir, "images")
             imagesDir.mkdirs()
@@ -110,6 +119,12 @@ class ReceiptScanViewModel(
                 file.outputStream().use { output ->
                     input.copyTo(output)
                 }
+            }
+
+            if (extension == ".pdf" && FileUtils.isPdfPasswordProtected(context, file.absolutePath)) {
+                file.delete()
+                _pdfPasswordError.value = true
+                return
             }
 
             _imagePath.value = file.absolutePath
