@@ -2,10 +2,14 @@ package com.fmz.spenitaicore.ui.income
 
 import android.content.Intent
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
@@ -16,6 +20,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.fmz.spenitaicore.R
@@ -56,10 +61,23 @@ fun IncomeScreen(
     val isBusy by viewModel.isBusy.collectAsStateWithLifecycle()
 
     var showCategoryDropdown by remember { mutableStateOf(false) }
-    var showPeriodDropdown by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showConvertConfirm by remember { mutableStateOf(false) }
     var pendingDeleteEntry by remember { mutableStateOf<IncomeEntry?>(null) }
+    val periodOptions = remember {
+        listOf(
+            "Last30" to "30d",
+            "Last90" to "90d",
+            "ThisYear" to "Year",
+            "All" to "All"
+        )
+    }
+    val selectedPeriodLabel = when (selectedPeriod) {
+        "Last90" -> "Last 90 days"
+        "ThisYear" -> "This year"
+        "All" -> "All time"
+        else -> "Last 30 days"
+    }
 
     LaunchedEffect(Unit) {
         viewModel.quietLoad()
@@ -100,32 +118,15 @@ fun IncomeScreen(
         }
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-            // Stats header
-            Card(
+            IncomeSummaryCard(
+                totalThisMonthText = totalThisMonthText,
+                netText = netText,
+                periodLabel = selectedPeriodLabel,
+                entryCount = incomeEntries.size,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 12.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer
-                ),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
-                    horizontalArrangement = Arrangement.SpaceEvenly
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("Total Income", style = MaterialTheme.typography.labelSmall)
-                        Text(totalThisMonthText, style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold)
-                    }
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("Net", style = MaterialTheme.typography.labelSmall)
-                        Text(netText, style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
+                    .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 12.dp)
+            )
 
             // Search bar — compact
             TextField(
@@ -148,7 +149,7 @@ fun IncomeScreen(
                     } else {
                         IconButton(onClick = { viewModel.applySearchFilters() },
                             modifier = Modifier.size(24.dp)) {
-                            Icon(Icons.Filled.KeyboardArrowRight, contentDescription = "Search",
+                            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Search",
                                 modifier = Modifier.size(16.dp))
                         }
                     }
@@ -163,44 +164,22 @@ fun IncomeScreen(
                 )
             )
 
-            // Filter row
+            PeriodSelector(
+                selectedPeriod = selectedPeriod,
+                periodOptions = periodOptions,
+                onPeriodSelected = viewModel::setPeriod,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+            )
+
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    .padding(start = 16.dp, end = 16.dp, top = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                // Period filter
-                Box {
-                    FilterChip(
-                        selected = true,
-                        onClick = { showPeriodDropdown = true },
-                        label = {
-                            val periods = listOf("Last30" to "Last 30 Days", "Last90" to "Last 90 Days",
-                                "ThisYear" to "This Year", "All" to "All Time")
-                            Text(periods.firstOrNull { it.first == selectedPeriod }?.second ?: selectedPeriod)
-                        },
-                        trailingIcon = { Icon(Icons.Filled.ArrowDropDown, null, Modifier.size(18.dp)) }
-                    )
-                    DropdownMenu(
-                        expanded = showPeriodDropdown,
-                        onDismissRequest = { showPeriodDropdown = false }
-                    ) {
-                        listOf("Last30" to "Last 30 Days", "Last90" to "Last 90 Days",
-                            "ThisYear" to "This Year", "All" to "All Time")
-                            .forEach { (value, label) ->
-                                DropdownMenuItem(
-                                    text = { Text(label) },
-                                    onClick = {
-                                        viewModel.setPeriod(value)
-                                        showPeriodDropdown = false
-                                    }
-                                )
-                            }
-                    }
-                }
-
-                // Category filter
                 Box {
                     FilterChip(
                         selected = selectedCategory != "All",
@@ -235,11 +214,19 @@ fun IncomeScreen(
                         }
                     }
                 }
+                Text(
+                    text = "$selectedPeriodLabel · ${incomeEntries.size} ${if (incomeEntries.size == 1) "entry" else "entries"}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
             }
 
             // Total header
             Text(
-                text = "Total: $totalText",
+                text = "Showing total: $totalText",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
@@ -247,27 +234,23 @@ fun IncomeScreen(
 
             // List
             if (incomeEntries.isEmpty()) {
-                Box(
-                    modifier = Modifier.fillMaxSize().padding(32.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("No income entries found", style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
+                IncomeEmptyState(
+                    hasFilters = searchQuery.isNotBlank() || selectedCategory != "All",
+                    onAddIncome = onNavigateToScan,
+                    onClearFilters = {
+                        viewModel.onSearchQueryChanged("")
+                        viewModel.setCategory("All")
+                    },
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp)
+                )
             } else {
                 LazyColumn(
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    item {
-                        val adUnitId = LocalContext.current.getString(R.string.admob_native_ad_unit_id)
-                        NativeAdCard(
-                            modifier = Modifier.fillMaxWidth(),
-                            adUnitId = adUnitId
-                        )
-                    }
-
-                    items(incomeEntries, key = { it.id }) { entry ->
+                    items(incomeEntries.take(4), key = { it.id }) { entry ->
                         IncomeCard(
                             entry = entry,
                             onClick = { viewModel.viewIncome(entry) },
@@ -277,6 +260,38 @@ fun IncomeScreen(
                                 showDeleteConfirm = true
                             }
                         )
+                    }
+
+                    if (incomeEntries.size > 4) {
+                        item {
+                            val adUnitId = LocalContext.current.getString(R.string.admob_native_ad_unit_id)
+                            NativeAdCard(
+                                modifier = Modifier.fillMaxWidth(),
+                                adUnitId = adUnitId
+                            )
+                        }
+                    }
+
+                    items(incomeEntries.drop(4), key = { it.id }) { entry ->
+                        IncomeCard(
+                            entry = entry,
+                            onClick = { viewModel.viewIncome(entry) },
+                            onEdit = { viewModel.startEdit(entry) },
+                            onDelete = {
+                                pendingDeleteEntry = entry
+                                showDeleteConfirm = true
+                            }
+                        )
+                    }
+
+                    if (incomeEntries.size <= 4) {
+                        item {
+                            val adUnitId = LocalContext.current.getString(R.string.admob_native_ad_unit_id)
+                            NativeAdCard(
+                                modifier = Modifier.fillMaxWidth(),
+                                adUnitId = adUnitId
+                            )
+                        }
                     }
                     item { Spacer(modifier = Modifier.height(72.dp)) }
                 }
@@ -589,5 +604,205 @@ fun IncomeScreen(
                 }
             }
         )
+    }
+}
+
+@Composable
+private fun IncomeSummaryCard(
+    totalThisMonthText: String,
+    netText: String,
+    periodLabel: String,
+    entryCount: Int,
+    modifier: Modifier = Modifier
+) {
+    val netIsPositive = !netText.trim().startsWith("-")
+
+    Card(
+        modifier = modifier,
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.86f)
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Income this cycle",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                    Text(
+                        text = totalThisMonthText,
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        maxLines = 1
+                    )
+                }
+                Surface(
+                    shape = RoundedCornerShape(999.dp),
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f)
+                ) {
+                    Text(
+                        text = "List: $periodLabel",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                    )
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                IncomeSummaryMetric(
+                    label = "Net after spend",
+                    value = netText,
+                    valueColor = if (netIsPositive) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.error
+                    },
+                    modifier = Modifier.weight(1f)
+                )
+                IncomeSummaryMetric(
+                    label = "Records shown",
+                    value = entryCount.toString(),
+                    valueColor = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun IncomeSummaryMetric(
+    label: String,
+    value: String,
+    valueColor: Color,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.58f)
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                text = value,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = valueColor,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
+private fun PeriodSelector(
+    selectedPeriod: String,
+    periodOptions: List<Pair<String, String>>,
+    onPeriodSelected: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier.horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        periodOptions.forEach { (value, label) ->
+            FilterChip(
+                selected = selectedPeriod == value,
+                onClick = { onPeriodSelected(value) },
+                label = { Text(label) }
+            )
+        }
+    }
+}
+
+@Composable
+private fun IncomeEmptyState(
+    hasFilters: Boolean,
+    onAddIncome: () -> Unit,
+    onClearFilters: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier,
+        contentAlignment = Alignment.Center
+    ) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f)
+            ),
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(18.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Payments,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(14.dp).size(32.dp)
+                    )
+                }
+                Text(
+                    text = if (hasFilters) "No matching income" else "No income yet",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    text = if (hasFilters) {
+                        "Try a different search or clear your filters."
+                    } else {
+                        "Add salary, freelance work, refunds, or other money coming in."
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                if (hasFilters) {
+                    OutlinedButton(onClick = onClearFilters) {
+                        Text("Clear filters")
+                    }
+                } else {
+                    Button(onClick = onAddIncome) {
+                        Icon(Icons.Filled.Add, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Add income")
+                    }
+                }
+            }
+        }
     }
 }

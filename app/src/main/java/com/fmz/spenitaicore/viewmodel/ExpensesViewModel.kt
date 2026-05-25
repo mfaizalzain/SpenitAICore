@@ -161,7 +161,7 @@ class ExpensesViewModel : ViewModel() {
                 _searchQuery.value = ""
                 _filteredReceipts.value = allReceipts.filter { r ->
                     r.isTaxDeductible && (r.taxYear == year || r.date.startsWith(year))
-                }
+                }.sortedByNewestReceipt()
                 updateTotal()
                 return true
             }
@@ -171,7 +171,7 @@ class ExpensesViewModel : ViewModel() {
         Regex("""^(?:>\s*|above[:\s]*)(\d+(?:\.\d+)?)$""", RegexOption.IGNORE_CASE).find(query)?.let {
             val min = it.groupValues[1].toDoubleOrNull() ?: return@let
             _searchQuery.value = ""
-            _filteredReceipts.value = allReceipts.filter { r -> r.total >= min }
+            _filteredReceipts.value = allReceipts.filter { r -> r.total >= min }.sortedByNewestReceipt()
             updateTotal()
             return true
         }
@@ -180,7 +180,7 @@ class ExpensesViewModel : ViewModel() {
         Regex("""^(?:<\s*|below[:\s]*)(\d+(?:\.\d+)?)$""", RegexOption.IGNORE_CASE).find(query)?.let {
             val max = it.groupValues[1].toDoubleOrNull() ?: return@let
             _searchQuery.value = ""
-            _filteredReceipts.value = allReceipts.filter { r -> r.total <= max }
+            _filteredReceipts.value = allReceipts.filter { r -> r.total <= max }.sortedByNewestReceipt()
             updateTotal()
             return true
         }
@@ -196,7 +196,7 @@ class ExpensesViewModel : ViewModel() {
             _filteredReceipts.value = allReceipts.filter { r ->
                 val d = DateUtils.toLocalDate(r.date)
                 !d.isBefore(from) && !d.isAfter(to)
-            }
+            }.sortedByNewestReceipt()
             updateTotal()
             return true
         }
@@ -209,7 +209,7 @@ class ExpensesViewModel : ViewModel() {
             }
             if (match != null) {
                 _searchQuery.value = ""
-                _filteredReceipts.value = allReceipts.filter { r -> r.category == match }
+                _filteredReceipts.value = allReceipts.filter { r -> r.category == match }.sortedByNewestReceipt()
                 updateTotal()
                 return true
             }
@@ -274,7 +274,7 @@ class ExpensesViewModel : ViewModel() {
             filtered = filtered.filter { it.isTaxDeductible }
         }
 
-        _filteredReceipts.value = filtered.toList()
+        _filteredReceipts.value = filtered.toList().sortedByNewestReceipt()
         updateTotal()
     }
 
@@ -373,4 +373,7 @@ class ExpensesViewModel : ViewModel() {
     fun setIsRefreshing(value: Boolean) {
         _isRefreshing.value = value
     }
+
+    private fun List<Receipt>.sortedByNewestReceipt(): List<Receipt> =
+        sortedWith(compareByDescending<Receipt> { it.date }.thenByDescending { it.createdAt })
 }

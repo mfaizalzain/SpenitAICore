@@ -246,9 +246,7 @@ class DashboardViewModel : ViewModel() {
             }
         }
 
-        val recent = allReceipts
-            .sortedWith(compareByDescending<Receipt> { it.date }.thenByDescending { it.createdAt })
-            .take(5)
+        val recent = allReceipts.sortedByNewestReceipt().take(5)
 
         return DashboardMetrics(
             todayTotal = todayTotal,
@@ -457,3 +455,6 @@ private data class PipelineData(
     val cycle: SalaryCyclePeriod,
     val now: LocalDate
 )
+
+private fun List<Receipt>.sortedByNewestReceipt(): List<Receipt> =
+    sortedWith(compareByDescending<Receipt> { it.date }.thenByDescending { it.createdAt })
