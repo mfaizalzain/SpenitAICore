@@ -118,15 +118,7 @@ fun IncomeScreen(
         }
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-            IncomeSummaryCard(
-                totalThisMonthText = totalThisMonthText,
-                netText = netText,
-                periodLabel = selectedPeriodLabel,
-                entryCount = incomeEntries.size,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 12.dp)
-            )
+
 
             // Search bar — compact
             TextField(
