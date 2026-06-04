@@ -38,6 +38,7 @@ class AppPreferences(private val context: Context) {
         val KEY_AI_API_KEY = stringPreferencesKey("ai_api_key")
         val KEY_AI_MODEL = stringPreferencesKey("ai_model")
         val KEY_AI_CUSTOM_URL = stringPreferencesKey("ai_custom_url")
+        val KEY_HAS_DISMISSED_AICORE_DIALOG = booleanPreferencesKey("has_dismissed_aicore_dialog")
     }
 
     val defaultCurrency: Flow<String> = context.dataStore.data.map { prefs ->
@@ -228,6 +229,13 @@ class AppPreferences(private val context: Context) {
             it.remove(KEY_AI_MODEL)
             it.remove(KEY_AI_CUSTOM_URL)
         }
+    }
+
+    suspend fun hasDismissedAiCoreDialog(): Boolean =
+        context.dataStore.data.first()[KEY_HAS_DISMISSED_AICORE_DIALOG] ?: false
+
+    suspend fun setDismissedAiCoreDialog(dismissed: Boolean) {
+        context.dataStore.edit { it[KEY_HAS_DISMISSED_AICORE_DIALOG] = dismissed }
     }
 
     suspend fun clearAll() {

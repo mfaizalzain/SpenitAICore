@@ -271,6 +271,35 @@ Return ONLY a JSON object: {"type":"income"}
         }
     }
 
+    enum class AiCoreSupportStatus {
+        AVAILABLE,
+        DOWNLOADABLE,
+        NOT_SUPPORTED
+    }
+
+    suspend fun checkAiCoreSupportStatus(): AiCoreSupportStatus {
+        val candidates = listOf(previewFullModel, previewFastModel, stableModel)
+        var hasDownloadable = false
+        for (model in candidates) {
+            try {
+                val status = model.checkStatus()
+                if (status == FeatureStatus.AVAILABLE) {
+                    return AiCoreSupportStatus.AVAILABLE
+                }
+                if (status == FeatureStatus.DOWNLOADABLE || status == FeatureStatus.DOWNLOADING) {
+                    hasDownloadable = true
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Model status check failed: ${e.message}")
+            }
+        }
+        if (hasDownloadable) return AiCoreSupportStatus.DOWNLOADABLE
+        if (isAiCoreAvailable(context)) {
+            return AiCoreSupportStatus.DOWNLOADABLE
+        }
+        return AiCoreSupportStatus.NOT_SUPPORTED
+    }
+
     private val previewFullModel = Generation.getClient(
         generationConfig {
             modelConfig = modelConfig {

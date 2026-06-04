@@ -120,9 +120,31 @@ class DashboardViewModel : ViewModel() {
     private val _isRefreshing = MutableStateFlow(false)
     val isRefreshing: StateFlow<Boolean> = _isRefreshing
 
+    private val _showAiCoreDialog = MutableStateFlow(false)
+    val showAiCoreDialog: StateFlow<Boolean> = _showAiCoreDialog
+
     init {
         observeGreeting()
         observeDataPipeline()
+        checkAiCoreStatus()
+    }
+
+    private fun checkAiCoreStatus() {
+        viewModelScope.launch {
+            val hasDismissed = preferences.hasDismissedAiCoreDialog()
+            val remoteConfigured = preferences.hasAiApiKey() && preferences.getAiProvider() != "aicore"
+            if (!hasDismissed && !remoteConfigured) {
+                val supportStatus = aiCore.checkAiCoreSupportStatus()
+                _showAiCoreDialog.value = (supportStatus == com.fmz.spenitaicore.ai.AiCoreService.AiCoreSupportStatus.DOWNLOADABLE)
+            }
+        }
+    }
+
+    fun dismissAiCoreDialog() {
+        viewModelScope.launch {
+            preferences.setDismissedAiCoreDialog(true)
+            _showAiCoreDialog.value = false
+        }
     }
 
     private fun observeGreeting() {

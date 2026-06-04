@@ -62,6 +62,7 @@ fun SettingsScreen(
     val aiModel by viewModel.aiModel.collectAsStateWithLifecycle()
     val aiCustomUrl by viewModel.aiCustomUrl.collectAsStateWithLifecycle()
     val aiProviderError by viewModel.aiProviderError.collectAsStateWithLifecycle()
+    val aiCoreSupported by viewModel.aiCoreSupported.collectAsStateWithLifecycle()
     val aiProviderNames = viewModel.aiProviderNames
     val aiProviderKeys = viewModel.aiProviderKeys
     val aiProviderModels = viewModel.aiProviderModels
@@ -424,25 +425,38 @@ fun SettingsScreen(
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
+                            val isUnsupportedAiCore = aiProvider == "aicore" && !aiCoreSupported
                             Icon(
-                                imageVector = if (aiApiKey.isNotEmpty()) Icons.Filled.CheckCircle else Icons.Filled.SmartToy,
+                                imageVector = when {
+                                    isUnsupportedAiCore -> Icons.Filled.Error
+                                    aiApiKey.isNotEmpty() -> Icons.Filled.CheckCircle
+                                    else -> Icons.Filled.SmartToy
+                                },
                                 contentDescription = null,
-                                tint = if (aiApiKey.isNotEmpty()) MaterialTheme.colorScheme.primary
-                                       else MaterialTheme.colorScheme.onSurfaceVariant,
+                                tint = when {
+                                    isUnsupportedAiCore -> MaterialTheme.colorScheme.error
+                                    aiApiKey.isNotEmpty() -> MaterialTheme.colorScheme.primary
+                                    else -> MaterialTheme.colorScheme.onSurfaceVariant
+                                },
                                 modifier = Modifier.size(24.dp)
                             )
                             Spacer(Modifier.width(12.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    aiProviderNames[aiProvider] ?: "On-device (AICore)",
+                                    (aiProviderNames[aiProvider] ?: "On-device (AICore)") + if (isUnsupportedAiCore) " (Unsupported)" else "",
                                     fontWeight = FontWeight.SemiBold,
-                                    style = MaterialTheme.typography.bodyMedium
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = if (isUnsupportedAiCore) MaterialTheme.colorScheme.error else androidx.compose.ui.graphics.Color.Unspecified
                                 )
                                 Text(
-                                    if (aiApiKey.isNotEmpty()) "API key configured"
-                                    else "Free on-device AI · No key needed",
+                                    when {
+                                        isUnsupportedAiCore -> "This device does not support built-in on-device AI"
+                                        aiApiKey.isNotEmpty() -> "API key configured"
+                                        else -> "Free on-device AI · No key needed"
+                                    },
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = if (isUnsupportedAiCore) MaterialTheme.colorScheme.error
+                                            else MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
@@ -509,11 +523,27 @@ fun SettingsScreen(
                             }
 
                             Spacer(Modifier.height(8.dp))
-                            Text(
-                                "Note: Built-in on-device AI (AICore) may not be as accurate as using an external API key.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                            if (aiCoreSupported) {
+                                Text(
+                                    "Note: Built-in on-device AI (AICore) may not be as accurate as using an external API key.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            } else {
+                                Card(
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.errorContainer
+                                    ),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text(
+                                        text = "On-device AI is not supported on this phone. Please configure a Gemini or OpenAI API Key to use document scanning and insights.",
+                                        modifier = Modifier.padding(12.dp),
+                                        color = MaterialTheme.colorScheme.onErrorContainer,
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
+                            }
                         }
                     }
                 }

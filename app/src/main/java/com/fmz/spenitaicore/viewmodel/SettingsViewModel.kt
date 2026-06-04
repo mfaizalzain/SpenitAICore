@@ -96,6 +96,9 @@ class SettingsViewModel : ViewModel() {
     private val _aiProviderError = MutableStateFlow<String?>(null)
     val aiProviderError: StateFlow<String?> = _aiProviderError
 
+    private val _aiCoreSupported = MutableStateFlow(true)
+    val aiCoreSupported: StateFlow<Boolean> = _aiCoreSupported
+
     val aiProviderNames = mapOf(
         "aicore" to "On-device (AICore)",
         "gemini" to "Google Gemini",
@@ -129,6 +132,7 @@ class SettingsViewModel : ViewModel() {
                 _aiApiKey.value = preferences.getAiApiKey()
                 _aiModel.value = preferences.getAiModel()
                 _aiCustomUrl.value = preferences.getAiCustomUrl()
+                _aiCoreSupported.value = (container.aiCoreService.checkAiCoreSupportStatus() != com.fmz.spenitaicore.ai.AiCoreService.AiCoreSupportStatus.NOT_SUPPORTED)
             } finally {
                 _isBusy.value = false
             }

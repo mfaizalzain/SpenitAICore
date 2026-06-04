@@ -81,9 +81,9 @@ fun DashboardScreen(
     var showFabMenu by remember { mutableStateOf(false) }
     var pendingDeleteReceipt by remember { mutableStateOf<Receipt?>(null) }
 
-    var showAiCoreDialog by remember { mutableStateOf(true) }
+    val showAiCoreDialog by viewModel.showAiCoreDialog.collectAsStateWithLifecycle()
     if (showAiCoreDialog) {
-        AiCoreInstallDialog(onDismiss = { showAiCoreDialog = false })
+        AiCoreInstallDialog(onDismiss = { viewModel.dismissAiCoreDialog() })
     }
 
     Scaffold(
