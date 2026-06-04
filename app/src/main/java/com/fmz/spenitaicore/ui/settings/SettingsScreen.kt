@@ -425,16 +425,16 @@ fun SettingsScreen(
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            val isUnsupportedAiCore = aiProvider == "aicore" && !aiCoreSupported
+                            val isUsingProxyFallback = aiProvider == "aicore" && !aiCoreSupported
                             Icon(
                                 imageVector = when {
-                                    isUnsupportedAiCore -> Icons.Filled.Error
+                                    isUsingProxyFallback -> Icons.Filled.CloudQueue
                                     aiApiKey.isNotEmpty() -> Icons.Filled.CheckCircle
                                     else -> Icons.Filled.SmartToy
                                 },
                                 contentDescription = null,
                                 tint = when {
-                                    isUnsupportedAiCore -> MaterialTheme.colorScheme.error
+                                    isUsingProxyFallback -> MaterialTheme.colorScheme.secondary
                                     aiApiKey.isNotEmpty() -> MaterialTheme.colorScheme.primary
                                     else -> MaterialTheme.colorScheme.onSurfaceVariant
                                 },
@@ -443,20 +443,18 @@ fun SettingsScreen(
                             Spacer(Modifier.width(12.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    (aiProviderNames[aiProvider] ?: "On-device (AICore)") + if (isUnsupportedAiCore) " (Unsupported)" else "",
+                                    if (isUsingProxyFallback) "SpenIt Cloud AI (Gemini Fallback)" else (aiProviderNames[aiProvider] ?: "On-device (AICore)"),
                                     fontWeight = FontWeight.SemiBold,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = if (isUnsupportedAiCore) MaterialTheme.colorScheme.error else androidx.compose.ui.graphics.Color.Unspecified
+                                    style = MaterialTheme.typography.bodyMedium
                                 )
                                 Text(
                                     when {
-                                        isUnsupportedAiCore -> "This device does not support built-in on-device AI"
+                                        isUsingProxyFallback -> "On-device AI unsupported · Using secure proxy"
                                         aiApiKey.isNotEmpty() -> "API key configured"
                                         else -> "Free on-device AI · No key needed"
                                     },
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = if (isUnsupportedAiCore) MaterialTheme.colorScheme.error
-                                            else MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
@@ -532,14 +530,14 @@ fun SettingsScreen(
                             } else {
                                 Card(
                                     colors = CardDefaults.cardColors(
-                                        containerColor = MaterialTheme.colorScheme.errorContainer
+                                        containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
                                     ),
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
                                     Text(
-                                        text = "On-device AI is not supported on this phone. Please configure a Gemini or OpenAI API Key to use document scanning and insights.",
+                                        text = "On-device AI is not supported on this phone. We will securely use SpenIt's cloud proxy to perform document scanning and insights. You can also configure a custom API key above.",
                                         modifier = Modifier.padding(12.dp),
-                                        color = MaterialTheme.colorScheme.onErrorContainer,
+                                        color = MaterialTheme.colorScheme.onSecondaryContainer,
                                         style = MaterialTheme.typography.bodySmall
                                     )
                                 }
