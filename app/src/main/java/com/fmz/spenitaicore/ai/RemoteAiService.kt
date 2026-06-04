@@ -33,6 +33,9 @@ class RemoteAiService(private val context: Context) {
         private const val TAG = "RemoteAiService"
         private const val TIMEOUT_MS = 60_000
 
+        private const val AI_PROXY_BASE_URL = "https://spenit-ai-proxy.ashymoss-c7902691.southeastasia.azurecontainerapps.io"
+        private const val AI_PROXY_KEY = "0stUQ6kx95+X68RtufGdhJwBoSpGpe8rSRCsEcofxZg="
+
         // Default models per provider
         val DEFAULT_MODELS = mapOf(
             "gemini" to "gemini-flash-lite-latest",
@@ -333,7 +336,12 @@ class RemoteAiService(private val context: Context) {
 
     // ── HTTP Helper ────────────────────────────────────────────────────────
 
-    private fun httpPost(urlStr: String, jsonBody: String, bearerToken: String? = null): String? {
+    private fun httpPost(
+        urlStr: String,
+        jsonBody: String,
+        bearerToken: String? = null,
+        proxyKey: String? = null
+    ): String? {
         return try {
             val url = URL(urlStr)
             val conn = url.openConnection() as HttpURLConnection
@@ -341,6 +349,9 @@ class RemoteAiService(private val context: Context) {
             conn.setRequestProperty("Content-Type", "application/json")
             if (bearerToken != null) {
                 conn.setRequestProperty("Authorization", "Bearer $bearerToken")
+            }
+            if (proxyKey != null) {
+                conn.setRequestProperty("X-SpenIt-Proxy-Key", proxyKey)
             }
             conn.doOutput = true
             conn.connectTimeout = TIMEOUT_MS
@@ -360,6 +371,80 @@ class RemoteAiService(private val context: Context) {
             }
         } catch (e: Exception) {
             Log.e(TAG, "HTTP POST failed: ${e.message}", e)
+            null
+        }
+    }
+
+    // ── SpenIt Proxy Calls ────────────────────────────────────────────────
+
+    suspend fun callProxyVision(imageBitmap: Bitmap, prompt: String): String? = withContext(Dispatchers.IO) {
+        try {
+            val base64 = bitmapToBase64(imageBitmap)
+            val modelName = DEFAULT_MODELS["gemini"]!!
+            val urlStr = "$AI_PROXY_BASE_URL/v1beta/models/$modelName:generateContent"
+
+            val json = buildJsonObject {
+                putJsonArray("contents") {
+                    addJsonObject {
+                        putJsonArray("parts") {
+                            addJsonObject {
+                                put("text", prompt)
+                            }
+                            addJsonObject {
+                                putJsonObject("inlineData") {
+                                    put("mimeType", "image/jpeg")
+                                    put("data", base64)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            val response = httpPost(urlStr, json.toString(), bearerToken = null, proxyKey = AI_PROXY_KEY)
+            if (response == null) {
+                Log.w(TAG, "Proxy Gemini API returned null response")
+                return@withContext null
+            }
+
+            val jsonElement = Json.parseToJsonElement(response).jsonObject
+            val candidates = jsonElement["candidates"]?.jsonArray
+            val text = candidates?.firstOrNull()
+                ?.jsonObject
+                ?.let { extractGeminiText(it) }
+            text?.trim()
+        } catch (e: Exception) {
+            Log.e(TAG, "Proxy Vision request failed", e)
+            null
+        }
+    }
+
+    suspend fun callProxyText(prompt: String): String? = withContext(Dispatchers.IO) {
+        try {
+            val modelName = DEFAULT_MODELS["gemini"]!!
+            val urlStr = "$AI_PROXY_BASE_URL/v1beta/models/$modelName:generateContent"
+
+            val json = buildJsonObject {
+                putJsonArray("contents") {
+                    addJsonObject {
+                        putJsonArray("parts") {
+                            addJsonObject {
+                                put("text", prompt)
+                            }
+                        }
+                    }
+                }
+            }
+
+            val response = httpPost(urlStr, json.toString(), bearerToken = null, proxyKey = AI_PROXY_KEY) ?: return@withContext null
+            val jsonElement = Json.parseToJsonElement(response).jsonObject
+            val text = jsonElement["candidates"]?.jsonArray
+                ?.firstOrNull()
+                ?.jsonObject
+                ?.let { extractGeminiText(it) }
+            text?.trim()
+        } catch (e: Exception) {
+            Log.e(TAG, "Proxy Text request failed", e)
             null
         }
     }
