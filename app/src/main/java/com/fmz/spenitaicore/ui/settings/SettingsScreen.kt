@@ -425,16 +425,13 @@ fun SettingsScreen(
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            val isUsingProxyFallback = aiProvider == "aicore" && !aiCoreSupported
                             Icon(
                                 imageVector = when {
-                                    isUsingProxyFallback -> Icons.Filled.CloudQueue
                                     aiApiKey.isNotEmpty() -> Icons.Filled.CheckCircle
                                     else -> Icons.Filled.SmartToy
                                 },
                                 contentDescription = null,
                                 tint = when {
-                                    isUsingProxyFallback -> MaterialTheme.colorScheme.secondary
                                     aiApiKey.isNotEmpty() -> MaterialTheme.colorScheme.primary
                                     else -> MaterialTheme.colorScheme.onSurfaceVariant
                                 },
@@ -443,13 +440,12 @@ fun SettingsScreen(
                             Spacer(Modifier.width(12.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    if (isUsingProxyFallback) "SpenIt Cloud AI (Gemini Fallback)" else (aiProviderNames[aiProvider] ?: "On-device (AICore)"),
+                                    aiProviderNames[aiProvider] ?: "On-device (AICore)",
                                     fontWeight = FontWeight.SemiBold,
                                     style = MaterialTheme.typography.bodyMedium
                                 )
                                 Text(
                                     when {
-                                        isUsingProxyFallback -> "On-device AI unsupported · Using secure proxy"
                                         aiApiKey.isNotEmpty() -> "API key configured"
                                         else -> "Free on-device AI · No key needed"
                                     },
@@ -535,7 +531,7 @@ fun SettingsScreen(
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
                                     Text(
-                                        text = "On-device AI is not supported on this phone. We will securely use SpenIt's cloud proxy to perform document scanning and insights. You can also configure a custom API key above.",
+                                        text = "On-device AI is not supported on this phone. Configure an API key above to use a remote AI provider for document scanning and insights.",
                                         modifier = Modifier.padding(12.dp),
                                         color = MaterialTheme.colorScheme.onSecondaryContainer,
                                         style = MaterialTheme.typography.bodySmall

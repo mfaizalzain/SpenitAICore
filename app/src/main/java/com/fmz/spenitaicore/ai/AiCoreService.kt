@@ -239,88 +239,6 @@ Return format only (strict JSON, no markdown):
         return BankStatementResult(bankName = bankName, accountLast4 = accountLast4, period = period, transactions = deduped)
     }
 
-    private suspend fun tryProxyBankStatement(
-        imagePath: String,
-        isPdf: Boolean,
-        renderer: PdfRenderer?,
-        pageCount: Int
-    ): BankStatementResult? {
-        if (!remoteAiService.isOnline()) return null
-
-        val prompt = """You are a bank statement parser. Extract all transaction data from this bank statement page.
-Return ONLY valid JSON with no markdown, no explanation, no extra text.
-
-Extract ALL transaction rows. Each transaction should have: date (YYYY-MM-DD), description, amount (positive for credit, negative for debit), type ("credit" or "debit").
-
-IMPORTANT: Look at sign prefixes/suffixes on amounts:
-- Amount with "+" before or after (e.g. "+100.00" or "100.00+") → positive credit (income)
-- Amount with "-" before or after (e.g. "-50.00" or "50.00-") → negative debit (expense)
-- Parenthetical amounts "(50.00)" → negative debit (expense)
-
-Handle these date formats:
-- DD/MM/YY or DD/MM/YYYY
-- D MMM YYYY or DD MMM YYYY (e.g., "1 Mar 2026")
-- DD Mon or D Mon (day + abbreviated month, infer year from statement period)
-- DDMmmYYYY (no separators, e.g., "27Mar2026")
-
-Skip: balance rows, summary rows, column headers, daily interest below RM 1.00, internal pocket transfers.
-
-Return format only (strict JSON, no markdown):
-{
-  "bankName": "Bank Name",
-  "accountLast4": "1234",
-  "period": "Mar 2026",
-  "transactions": [
-    {"date":"2026-03-01","description":"Something","amount":-69.00,"type":"debit"}
-  ]
-}
-"""
-
-        val allTransactions = mutableListOf<BankTransaction>()
-        var bankName = ""
-        var accountLast4 = ""
-        var period = ""
-
-        for (i in 0 until pageCount) {
-            Log.d(TAG, "Proxy AI bank statement page ${i + 1}/$pageCount")
-            val bitmap = getPageBitmap(imagePath, isPdf, renderer, i)
-            if (bitmap == null) {
-                Log.w(TAG, "Could not render or load page ${i + 1}")
-                continue
-            }
-            try {
-                val response = remoteAiService.callProxyVision(bitmap, prompt)
-                if (response == null) {
-                    Log.w(TAG, "Proxy AI returned null for page ${i + 1}")
-                    continue
-                }
-                Log.d(TAG, "Proxy AI page ${i + 1} response: ${response.take(300)}")
-
-                try {
-                    val root = json.parseToJsonElement(response).jsonObject
-                    val transactions = root.arrayValue("transactions", "transaction", "entries", "rows", "items", "statementLines")
-                    if (transactions != null) {
-                        allTransactions += transactions.mapNotNull { (it as? JsonObject)?.toBankTransaction() }
-                            .filter { it.amount != 0.0 }
-                    }
-                    if (bankName.isEmpty()) bankName = root.stringValue("bankName", "bank name", "bank")
-                    if (accountLast4.isEmpty()) accountLast4 = root.stringValue("accountLast4", "account last 4", "accountNumber", "account number")
-                    if (period.isEmpty()) period = root.stringValue("period", "statementPeriod", "statement period")
-                } catch (e: Exception) {
-                    Log.w(TAG, "Failed to parse proxy AI page ${i + 1}", e)
-                }
-            } finally {
-                bitmap.recycle()
-            }
-        }
-
-        if (allTransactions.isEmpty()) return null
-
-        val deduped = allTransactions.distinctBy { "${it.date}|${it.amount}|${it.description.take(40)}" }
-        Log.d(TAG, "Proxy AI total: ${deduped.size} transactions (${allTransactions.size} raw)")
-        return BankStatementResult(bankName = bankName, accountLast4 = accountLast4, period = period, transactions = deduped)
-    }
-
     companion object {
         private const val AICORE_PACKAGE = "com.google.android.aicore"
         private const val AICORE_PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=$AICORE_PACKAGE"
@@ -428,18 +346,15 @@ Return ONLY a JSON object: {"type":"income"}
                 // If remote returned unknown, fall through to AICore
             }
 
-            // ── AICore fallback or SpenIt Proxy Fallback ──────────────────
-            val jsonStr = if (checkAiCoreSupportStatus() == AiCoreSupportStatus.NOT_SUPPORTED && remoteAiService.isOnline()) {
-                remoteAiService.callProxyVision(bitmap, CLASSIFY_PROMPT)
-            } else {
-                val model = getAvailableModel().model ?: return FinancialDocumentType.Unknown
-                val request = GenerateContentRequest.Builder(
-                    ImagePart(bitmap),
-                    TextPart(CLASSIFY_PROMPT)
-                ).build()
-                val response = inferenceMutex.withLock { model.generateContent(request) }
-                response.candidates.firstOrNull()?.text?.trim()
-            } ?: return FinancialDocumentType.Unknown
+            // ── AICore fallback ───────────────────────────────────────────
+            val model = getAvailableModel().model ?: return FinancialDocumentType.Unknown
+            val request = GenerateContentRequest.Builder(
+                ImagePart(bitmap),
+                TextPart(CLASSIFY_PROMPT)
+            ).build()
+            val response = inferenceMutex.withLock { model.generateContent(request) }
+            val jsonStr = response.candidates.firstOrNull()?.text?.trim()
+                ?: return FinancialDocumentType.Unknown
 
             val jsonObj = parseFirstJsonObject(jsonStr) ?: return FinancialDocumentType.Unknown
             when (jsonObj.stringValue("type", "documentType", "document_type").normalizedDocumentType()) {
@@ -489,10 +404,8 @@ Return ONLY a valid JSON object in exactly this format, with no markdown formatt
             if (parsedOcr != null) { Log.d(TAG, "Remote expense parse OK"); return parsedOcr }
             }
 
-            // ── AICore fallback or SpenIt Proxy Fallback ──────────────
-            val jsonStr = if (checkAiCoreSupportStatus() == AiCoreSupportStatus.NOT_SUPPORTED && remoteAiService.isOnline()) {
-                remoteAiService.callProxyVision(bitmap, prompt)
-            } else {
+            // ── AICore fallback ───────────────────────────────────────
+            val jsonStr = run {
                 val model = getAvailableModel().model ?: return null
                 val aicorePrompt = """Analyze this expense document image and extract the following information.
 Rules:
@@ -587,19 +500,15 @@ Rules:
             } else null
 
             if (jsonStr == null) {
-                // ── AICore fallback or SpenIt Proxy Fallback ──────────────
-                jsonStr = if (checkAiCoreSupportStatus() == AiCoreSupportStatus.NOT_SUPPORTED && remoteAiService.isOnline()) {
-                    remoteAiService.callProxyVision(bitmap, prompt)
-                } else {
-                    val model = getAvailableModel().model ?: return null
-                    val request = GenerateContentRequest.Builder(
-                        ImagePart(bitmap),
-                        TextPart(prompt)
-                    ).build()
-                    val response = inferenceMutex.withLock { model.generateContent(request) }
-                    response.candidates.firstOrNull()?.text
-                        ?.replace("```json", "")?.replace("```", "")?.trim()
-                }
+                // ── AICore fallback ───────────────────────────────────────
+                val model = getAvailableModel().model ?: return null
+                val request = GenerateContentRequest.Builder(
+                    ImagePart(bitmap),
+                    TextPart(prompt)
+                ).build()
+                val response = inferenceMutex.withLock { model.generateContent(request) }
+                jsonStr = response.candidates.firstOrNull()?.text
+                    ?.replace("```json", "")?.replace("```", "")?.trim()
             }
 
             if (jsonStr == null) return null
@@ -699,14 +608,6 @@ Rules:
                 Log.d(TAG, "Remote AI returned ${remoteResult.transactions.size} transactions for bank statement")
                 if (remoteResult.transactions.size >= 3) {
                     return remoteResult
-                }
-            }
-
-            // ── SpenIt Proxy Fallback for Unsupported devices ──────────────────
-            if (checkAiCoreSupportStatus() == AiCoreSupportStatus.NOT_SUPPORTED && remoteAiService.isOnline()) {
-                val proxyResult = tryProxyBankStatement(imagePath, isPdf, pdfRenderer, pageCount)
-                if (proxyResult != null && proxyResult.transactions.size >= 3) {
-                    return proxyResult
                 }
             }
 
@@ -1196,8 +1097,6 @@ Rules:
             val prompt = buildInsightsPrompt(receipts, incomeEntries, fallback, periodLabel, currency, periodStart, periodEnd)
             var jsonStr = if (isRemoteConfigured() && remoteAiService.isOnline()) {
                 tryRemoteText(prompt)
-            } else if (checkAiCoreSupportStatus() == AiCoreSupportStatus.NOT_SUPPORTED && remoteAiService.isOnline()) {
-                remoteAiService.callProxyText(prompt)
             } else {
                 val model = getAvailableModel().model ?: return fallback
                 val request = GenerateContentRequest.Builder(TextPart(prompt)).build()
