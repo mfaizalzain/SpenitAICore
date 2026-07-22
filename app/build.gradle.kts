@@ -7,12 +7,12 @@ plugins {
 
 android {
     namespace = "com.fmz.spenitaicore"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.fmz.spenitaicore"
         minSdk = 31
-        targetSdk = 35
+        targetSdk = 36
         versionCode = 25
         versionName = "1.2.8"
 
