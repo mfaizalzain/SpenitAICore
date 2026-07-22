@@ -1,10 +1,5 @@
-What's new in 1.1.2:
+What's new in 1.2.9:
 
-- Refreshed dashboard with safe-to-spend, income context, daily average and tax totals
-- New Tax Relief tab with yearly deductible summaries and ZIP export
-- Improved shared imports for receipts, PDFs, payslips and Malaysian bank statements
-- AI provider settings for AICore, Gemini, OpenAI and compatible custom endpoints
-- Better expense and income search, filters and record conversion
-- Google Drive backup and restore improvements
-- Account deletion option in Settings
-- UI polish, reliability fixes and performance improvements
+- Updated targetSdk and compileSdk to 36 for August 31, 2026 deadline
+- Removed SpenIt AI proxy fallback
+- UI refinements and bug fixes
