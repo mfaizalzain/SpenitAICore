@@ -15,3 +15,27 @@ local.properties
 *.jks
 *.keystore
 publish/play/credentials/
+
+# Signing material and credentials
+*.p12
+*.pfx
+*.pem
+*.key
+*.der
+keystore.properties
+signing.env
+*.env
+!.env.example
+
+# Service accounts / Firebase / Play API
+google-services.json
+GoogleService-Info.plist
+*service-account*.json
+*-serviceaccount.json
+play-publisher*.json
+
+# Generated marketing render intermediates (embed absolute local paths)
+publish/play/marketing-screenshots/.render/
+
+# Local agent/editor scratch state
+.claude/worktrees/
