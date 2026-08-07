@@ -279,6 +279,37 @@ class SettingsViewModel : ViewModel() {
         _exportError.value = null
     }
 
+    // ── Full data export (CSV) ─────────────────────────────────────
+
+    private val _isExportingAll = MutableStateFlow(false)
+    val isExportingAll: StateFlow<Boolean> = _isExportingAll
+
+    private val _fullExportResult = MutableStateFlow<ExportService.FullExportResult?>(null)
+    val fullExportResult: StateFlow<ExportService.FullExportResult?> = _fullExportResult
+
+    fun exportAllData() {
+        viewModelScope.launch {
+            _isExportingAll.value = true
+            _exportError.value = null
+            try {
+                val result = exportService.exportAllData()
+                if (result == null) {
+                    _exportError.value = "No data to export"
+                } else {
+                    _fullExportResult.value = result
+                }
+            } catch (e: Exception) {
+                _exportError.value = "Export failed: ${e.message}"
+            } finally {
+                _isExportingAll.value = false
+            }
+        }
+    }
+
+    fun clearFullExportResult() {
+        _fullExportResult.value = null
+    }
+
     // ── Backup ────────────────────────────────────────────────────
 
     private val driveService = container.driveBackupService
@@ -583,7 +614,9 @@ class SettingsViewModel : ViewModel() {
                     receiptRepo.deleteAll()
                     container.incomeRepository.deleteAll()
                     container.database.userProfileDao().deleteAll()
+                    container.categoryBudgetRepository.deleteAll()
                     container.sharedImportStore.clear()
+                    java.io.File(SpenItApp.instance.filesDir, "images").deleteRecursively()
                     preferences.clearAll()
                     BackupWorker.cancel(SpenItApp.instance)
                 }

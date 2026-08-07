@@ -344,6 +344,9 @@ class ExpensesViewModel : ViewModel() {
 
     fun deleteReceipt(receipt: Receipt) {
         viewModelScope.launch {
+            com.fmz.spenitaicore.util.FileUtils.deleteScannedImage(
+                SpenItApp.instance, receipt.imagePath
+            )
             receiptRepo.deleteReceipt(receipt)
             loadData()
         }

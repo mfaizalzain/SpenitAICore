@@ -22,6 +22,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.fmz.spenitaicore.AppContainer
 import com.fmz.spenitaicore.ui.auth.LoginScreen
+import com.fmz.spenitaicore.ui.budgets.BudgetsScreen
 import com.fmz.spenitaicore.ui.dashboard.DashboardScreen
 import com.fmz.spenitaicore.ui.expenses.ExpensesScreen
 import com.fmz.spenitaicore.ui.income.IncomeScreen
@@ -219,11 +220,20 @@ fun SpenItNavHost(
                     viewModel = settingsViewModel,
                     authViewModel = authViewModel,
                     onNavigateBack = { navController.popBackStack() },
+                    onNavigateToBudgets = { navController.navigate("budgets") },
                     onSignOut = {
                         navController.navigate("login") {
                             popUpTo(0) { inclusive = true }
                         }
                     }
+                )
+            }
+
+            composable("budgets") {
+                val budgetsViewModel: BudgetsViewModel = viewModel()
+                BudgetsScreen(
+                    viewModel = budgetsViewModel,
+                    onNavigateBack = { navController.popBackStack() }
                 )
             }
 

@@ -280,6 +280,9 @@ class IncomeViewModel : ViewModel() {
 
     fun deleteIncome(entry: IncomeEntry) {
         viewModelScope.launch {
+            com.fmz.spenitaicore.util.FileUtils.deleteScannedImage(
+                SpenItApp.instance, entry.imagePath
+            )
             incomeRepo.deleteIncomeEntry(entry)
             loadData()
         }

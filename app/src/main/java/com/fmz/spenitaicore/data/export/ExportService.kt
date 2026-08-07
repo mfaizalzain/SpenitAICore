@@ -2,16 +2,22 @@ package com.fmz.spenitaicore.data.export
 
 import android.content.Context
 import android.util.Log
+import com.fmz.spenitaicore.data.db.entity.IncomeEntry
 import com.fmz.spenitaicore.data.db.entity.Receipt
+import com.fmz.spenitaicore.data.repository.IncomeRepository
 import com.fmz.spenitaicore.data.repository.ReceiptRepository
 import java.io.File
 import java.io.FileOutputStream
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
 class ExportService(
     private val context: Context,
-    private val receiptRepository: ReceiptRepository
+    private val receiptRepository: ReceiptRepository,
+    private val incomeRepository: IncomeRepository
 ) {
     companion object {
         private const val TAG = "ExportService"
@@ -21,6 +27,13 @@ class ExportService(
         val zipPath: String,
         val receiptCount: Int,
         val totalTaxRelief: Double,
+        val currency: String
+    )
+
+    data class FullExportResult(
+        val zipPath: String,
+        val receiptCount: Int,
+        val incomeCount: Int,
         val currency: String
     )
 
@@ -112,6 +125,91 @@ class ExportService(
                     escapeCsv(r.taxCategory ?: ""),
                     escapeCsv(r.notes ?: ""),
                     if (hasAttachment) "Yes" else "No"
+                )
+                writer.write(row.joinToString(","))
+                writer.newLine()
+            }
+        }
+    }
+
+    /**
+     * Export every receipt and income entry as CSV files inside a ZIP.
+     */
+    suspend fun exportAllData(): FullExportResult? {
+        val receipts = receiptRepository.getReceiptsFromSync(null)
+        val incomes = incomeRepository.getIncomeEntriesFromSync(null)
+        if (receipts.isEmpty() && incomes.isEmpty()) return null
+
+        val currency = receipts.firstOrNull()?.currency
+            ?: incomes.firstOrNull()?.currency
+            ?: "$"
+
+        val exportDir = File(context.cacheDir, "full_export")
+        exportDir.deleteRecursively()
+        exportDir.mkdirs()
+
+        try {
+            writeReceiptsCsv(File(exportDir, "receipts.csv"), receipts)
+            writeIncomeCsv(File(exportDir, "income.csv"), incomes)
+
+            val stamp = SimpleDateFormat("yyyyMMdd_HHmm", Locale.US).format(Date())
+            val zipFile = File(context.cacheDir, "SpenIt_Export_$stamp.zip")
+            createZip(exportDir, zipFile)
+            exportDir.deleteRecursively()
+
+            Log.i(TAG, "Full export: ${receipts.size} receipts, ${incomes.size} income entries")
+            return FullExportResult(
+                zipPath = zipFile.absolutePath,
+                receiptCount = receipts.size,
+                incomeCount = incomes.size,
+                currency = currency
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "Full export failed", e)
+            exportDir.deleteRecursively()
+            return null
+        }
+    }
+
+    private fun writeReceiptsCsv(file: File, receipts: List<Receipt>) {
+        FileOutputStream(file).bufferedWriter().use { writer ->
+            writer.write(
+                "Date,Merchant,Category,Total,Currency,Tax Amount,Tax Year,Tax Category,Notes,Tags"
+            )
+            writer.newLine()
+            receipts.forEach { r ->
+                val row = listOf(
+                    r.date,
+                    escapeCsv(r.merchant),
+                    escapeCsv(r.category),
+                    "%.2f".format(r.total),
+                    r.currency,
+                    "%.2f".format(r.taxAmount),
+                    r.taxYear ?: "",
+                    escapeCsv(r.taxCategory ?: ""),
+                    escapeCsv(r.notes ?: ""),
+                    escapeCsv(r.tagsJson)
+                )
+                writer.write(row.joinToString(","))
+                writer.newLine()
+            }
+        }
+    }
+
+    private fun writeIncomeCsv(file: File, incomes: List<IncomeEntry>) {
+        FileOutputStream(file).bufferedWriter().use { writer ->
+            writer.write("Date,Source,Category,Amount,Currency,Notes,Recurring,From Bank Import")
+            writer.newLine()
+            incomes.forEach { e ->
+                val row = listOf(
+                    e.date,
+                    escapeCsv(e.source),
+                    escapeCsv(e.category),
+                    "%.2f".format(e.amount),
+                    e.currency,
+                    escapeCsv(e.notes ?: ""),
+                    if (e.isRecurring) "Yes" else "No",
+                    if (e.isFromBankImport) "Yes" else "No"
                 )
                 writer.write(row.joinToString(","))
                 writer.newLine()

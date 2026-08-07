@@ -446,6 +446,9 @@ class DashboardViewModel : ViewModel() {
     fun deleteReceipt(receipt: Receipt) {
         viewModelScope.launch {
             _isBusy.value = true
+            com.fmz.spenitaicore.util.FileUtils.deleteScannedImage(
+                SpenItApp.instance, receipt.imagePath
+            )
             receiptRepo.deleteReceipt(receipt)
             _isBusy.value = false
         }

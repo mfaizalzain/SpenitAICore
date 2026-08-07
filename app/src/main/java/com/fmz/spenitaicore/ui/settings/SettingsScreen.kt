@@ -47,6 +47,7 @@ fun SettingsScreen(
     viewModel: SettingsViewModel,
     authViewModel: AuthViewModel,
     onNavigateBack: () -> Unit,
+    onNavigateToBudgets: () -> Unit,
     onSignOut: () -> Unit
 ) {
     val selectedCurrency by viewModel.selectedCurrencyCode.collectAsStateWithLifecycle()
@@ -94,6 +95,8 @@ fun SettingsScreen(
     val restoreSuccess by viewModel.restoreSuccess.collectAsStateWithLifecycle()
     val restoreError by viewModel.restoreError.collectAsStateWithLifecycle()
     val selectedBackupForRestore by viewModel.selectedBackupForRestore.collectAsStateWithLifecycle()
+    val isExportingAll by viewModel.isExportingAll.collectAsStateWithLifecycle()
+    val fullExportResult by viewModel.fullExportResult.collectAsStateWithLifecycle()
 
     var showCurrencyDropdown by remember { mutableStateOf(false) }
     var showThemeDropdown by remember { mutableStateOf(false) }
@@ -102,6 +105,31 @@ fun SettingsScreen(
     val context = LocalContext.current
     val activity = context as? FragmentActivity
     var pendingAppLockEnable by remember { mutableStateOf(false) }
+
+    // Share the full-data export ZIP once it is ready.
+    LaunchedEffect(fullExportResult) {
+        fullExportResult?.let { result ->
+            val zipFile = java.io.File(result.zipPath)
+            if (zipFile.exists()) {
+                val uri = androidx.core.content.FileProvider.getUriForFile(
+                    context,
+                    "${context.packageName}.fileprovider",
+                    zipFile
+                )
+                val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                    type = "application/zip"
+                    putExtra(Intent.EXTRA_STREAM, uri)
+                    putExtra(
+                        Intent.EXTRA_SUBJECT,
+                        "SpenIt data export (${result.receiptCount} receipts, ${result.incomeCount} income entries)"
+                    )
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                context.startActivity(Intent.createChooser(shareIntent, "Share data export"))
+            }
+            viewModel.clearFullExportResult()
+        }
+    }
 
     val notificationPermLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -374,6 +402,16 @@ fun SettingsScreen(
                         }
                     }
                 }
+            }
+
+            // Budgets
+            item {
+                SettingsItem(
+                    title = "Budgets",
+                    subtitle = "Set monthly limits per category",
+                    icon = Icons.Filled.Insights,
+                    onClick = onNavigateToBudgets
+                )
             }
 
             // Security section
@@ -697,6 +735,52 @@ fun SettingsScreen(
                         }
                         Icon(Icons.Filled.ChevronRight, contentDescription = null,
                             tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+
+            // About section
+            item {
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                Text("Data", style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(vertical = 8.dp))
+            }
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surface
+                    )
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text("Export All Data",
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.SemiBold)
+                        Text("Download every receipt and income entry as CSV (ZIP)",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Button(
+                            onClick = { viewModel.exportAllData() },
+                            enabled = !isExportingAll,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            if (isExportingAll) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                    strokeWidth = 2.dp,
+                                    color = MaterialTheme.colorScheme.onPrimary
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text("Exporting...")
+                            } else {
+                                Icon(Icons.Outlined.FileDownload, contentDescription = null)
+                                Spacer(Modifier.width(8.dp))
+                                Text("Export CSV")
+                            }
+                        }
                     }
                 }
             }

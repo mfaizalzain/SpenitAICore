@@ -45,7 +45,9 @@ fun InsightsScreen(
     val isIncrease by viewModel.isIncrease.collectAsStateWithLifecycle()
     val periodSpendLabel by viewModel.periodSpendLabel.collectAsStateWithLifecycle()
     val topCategories by viewModel.topCategories.collectAsStateWithLifecycle()
+    val recurringExpenses by viewModel.recurringExpenses.collectAsStateWithLifecycle()
     val savingTips by viewModel.savingTips.collectAsStateWithLifecycle()
+    val currency by viewModel.currency.collectAsStateWithLifecycle()
     val weeklyTrend by viewModel.weeklyTrend.collectAsStateWithLifecycle()
     val aiSummary by viewModel.aiSummary.collectAsStateWithLifecycle()
     val keyFindings by viewModel.keyFindings.collectAsStateWithLifecycle()
@@ -307,6 +309,56 @@ fun InsightsScreen(
                                     Spacer(modifier = Modifier.height(4.dp))
                                     Text(trend.label, style = MaterialTheme.typography.labelSmall)
                                 }
+                            }
+                        }
+                    }
+                }
+
+                // Saving tips
+                // Recurring expenses
+                if (recurringExpenses.isNotEmpty()) {
+                    item {
+                        Text("Likely Recurring Expenses", style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "Merchants you paid 3+ times this period",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    items(recurringExpenses) { exp ->
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                            ),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    com.fmz.spenitaicore.data.db.entity.Receipt.getCategoryIcon(exp.category),
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(exp.merchant, style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.SemiBold)
+                                    Text(
+                                        "${exp.occurrences} payments",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Text(
+                                    com.fmz.spenitaicore.util.CurrencyFormatter.format(exp.totalAmount, currency),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold
+                                )
                             }
                         }
                     }

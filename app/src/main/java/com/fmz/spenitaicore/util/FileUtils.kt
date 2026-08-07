@@ -116,4 +116,21 @@ object FileUtils {
             null
         }
     }
+
+    /**
+     * Deletes a scanned/camera image owned by this app (files under
+     * filesDir/images). Files under shared_imports/ are intentionally
+     * left alone because shared import records still reference them.
+     */
+    fun deleteScannedImage(context: Context, imagePath: String?) {
+        if (imagePath.isNullOrEmpty()) return
+        try {
+            val file = File(imagePath)
+            val imagesDir = File(context.filesDir, "images").canonicalPath
+            if (file.canonicalPath.startsWith(imagesDir) && file.exists()) {
+                file.delete()
+            }
+        } catch (_: Exception) {
+        }
+    }
 }

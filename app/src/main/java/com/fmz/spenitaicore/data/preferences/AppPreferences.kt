@@ -36,6 +36,7 @@ class AppPreferences(private val context: Context) {
         // AI Provider
         val KEY_AI_PROVIDER = stringPreferencesKey("ai_provider")
         val KEY_AI_API_KEY = stringPreferencesKey("ai_api_key")
+        val KEY_AI_API_KEY_ENC = stringPreferencesKey("ai_api_key_enc")
         val KEY_AI_MODEL = stringPreferencesKey("ai_model")
         val KEY_AI_CUSTOM_URL = stringPreferencesKey("ai_custom_url")
         val KEY_HAS_DISMISSED_AICORE_DIALOG = booleanPreferencesKey("has_dismissed_aicore_dialog")
@@ -198,11 +199,36 @@ class AppPreferences(private val context: Context) {
         context.dataStore.edit { it[KEY_AI_PROVIDER] = provider }
     }
 
-    suspend fun getAiApiKey(): String =
-        context.dataStore.data.first()[KEY_AI_API_KEY] ?: ""
+    suspend fun getAiApiKey(): String {
+        val data = context.dataStore.data.first()
+        data[KEY_AI_API_KEY_ENC]?.let { encrypted ->
+            return com.fmz.spenitaicore.util.SecretCrypto.decrypt(encrypted) ?: ""
+        }
+
+        // Legacy plaintext value — migrate to the encrypted key on first read.
+        val legacy = data[KEY_AI_API_KEY] ?: ""
+        if (legacy.isNotEmpty()) {
+            com.fmz.spenitaicore.util.SecretCrypto.encrypt(legacy)?.let { encrypted ->
+                context.dataStore.edit {
+                    it[KEY_AI_API_KEY_ENC] = encrypted
+                    it.remove(KEY_AI_API_KEY)
+                }
+            }
+        }
+        return legacy
+    }
 
     suspend fun setAiApiKey(key: String) {
-        context.dataStore.edit { it[KEY_AI_API_KEY] = key }
+        val encrypted = com.fmz.spenitaicore.util.SecretCrypto.encrypt(key)
+        context.dataStore.edit {
+            if (encrypted != null) {
+                it[KEY_AI_API_KEY_ENC] = encrypted
+                it.remove(KEY_AI_API_KEY)
+            } else {
+                // Keystore unavailable — keep a plaintext fallback.
+                it[KEY_AI_API_KEY] = key
+            }
+        }
     }
 
     suspend fun getAiModel(): String =
@@ -226,6 +252,7 @@ class AppPreferences(private val context: Context) {
         context.dataStore.edit {
             it.remove(KEY_AI_PROVIDER)
             it.remove(KEY_AI_API_KEY)
+            it.remove(KEY_AI_API_KEY_ENC)
             it.remove(KEY_AI_MODEL)
             it.remove(KEY_AI_CUSTOM_URL)
         }

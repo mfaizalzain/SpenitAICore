@@ -5,6 +5,7 @@ import com.fmz.spenitaicore.data.db.AppDatabase
 import com.fmz.spenitaicore.data.repository.ReceiptRepository
 import com.fmz.spenitaicore.data.repository.IncomeRepository
 import com.fmz.spenitaicore.data.repository.SharedImportStore
+import com.fmz.spenitaicore.data.repository.CategoryBudgetRepository
 import com.fmz.spenitaicore.data.preferences.AppPreferences
 import com.fmz.spenitaicore.ai.AiCoreService
 import com.fmz.spenitaicore.data.auth.GoogleAuthService
@@ -68,6 +69,10 @@ class AppContainer(private val context: Application) {
         SharedImportStore(context)
     }
 
+    val categoryBudgetRepository: CategoryBudgetRepository by lazy {
+        CategoryBudgetRepository(database.categoryBudgetDao())
+    }
+
     val aiCoreService: AiCoreService by lazy {
         AiCoreService(context, preferences, receiptRepository)
     }
@@ -77,7 +82,7 @@ class AppContainer(private val context: Application) {
     }
 
     val exportService: ExportService by lazy {
-        ExportService(context, receiptRepository)
+        ExportService(context, receiptRepository, incomeRepository)
     }
 
     val driveBackupService: DriveBackupService by lazy {

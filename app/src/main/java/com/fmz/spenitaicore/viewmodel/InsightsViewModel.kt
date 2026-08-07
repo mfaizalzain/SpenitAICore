@@ -9,6 +9,8 @@ import com.fmz.spenitaicore.ai.SpendingInsights
 import com.fmz.spenitaicore.ai.SpendingTrend
 import com.fmz.spenitaicore.util.CurrencyFormatter
 import com.fmz.spenitaicore.util.DateUtils
+import com.fmz.spenitaicore.util.RecurringExpense
+import com.fmz.spenitaicore.util.RecurringExpenseAnalyzer
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -24,6 +26,9 @@ class InsightsViewModel : ViewModel() {
 
     private val _selectedRange = MutableStateFlow("Last30")
     val selectedRange: StateFlow<String> = _selectedRange
+
+    private val _currency = MutableStateFlow("$")
+    val currency: StateFlow<String> = _currency
 
     /** Per-period cache for AI-generated insights — avoids regenerating when switching ranges */
     private data class InsightsCache(
@@ -66,6 +71,9 @@ class InsightsViewModel : ViewModel() {
 
     private val _topCategories = MutableStateFlow<List<CategoryBreakdown>>(emptyList())
     val topCategories: StateFlow<List<CategoryBreakdown>> = _topCategories
+
+    private val _recurringExpenses = MutableStateFlow<List<RecurringExpense>>(emptyList())
+    val recurringExpenses: StateFlow<List<RecurringExpense>> = _recurringExpenses
 
     private val _savingTips = MutableStateFlow<List<SavingTip>>(emptyList())
     val savingTips: StateFlow<List<SavingTip>> = _savingTips
@@ -152,6 +160,7 @@ class InsightsViewModel : ViewModel() {
 
     private suspend fun applyInsights(forceAiRefresh: Boolean) {
         val currency = preferences.getDefaultCurrency()
+        _currency.value = currency
         val now = LocalDate.now()
 
         val range = selectedRangePeriod(_selectedRange.value, now)
@@ -203,6 +212,7 @@ class InsightsViewModel : ViewModel() {
             .take(5)
 
         _topCategories.value = categories
+        _recurringExpenses.value = RecurringExpenseAnalyzer.analyze(receipts)
 
         if (forceAiRefresh || insightsCache[_selectedRange.value] == null) {
             _aiStatusText.value = "Generating insights..."
