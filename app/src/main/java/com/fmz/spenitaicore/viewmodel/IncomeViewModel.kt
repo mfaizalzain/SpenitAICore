@@ -9,6 +9,7 @@ import com.fmz.spenitaicore.data.db.entity.Receipt
 import com.fmz.spenitaicore.util.CurrencyFormatter
 import com.fmz.spenitaicore.util.DateUtils
 import com.fmz.spenitaicore.util.SalaryCycle
+import com.fmz.spenitaicore.util.MoneyAggregator
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -19,6 +20,7 @@ class IncomeViewModel : ViewModel() {
     private val incomeRepo = container.incomeRepository
     private val receiptRepo = container.receiptRepository
     private val preferences = container.preferences
+    private val exchangeRates = container.exchangeRateRepository
 
     private var allEntries = emptyList<IncomeEntry>()
 
@@ -117,13 +119,19 @@ class IncomeViewModel : ViewModel() {
         val now = LocalDate.now()
         val payDay = preferences.getSalaryPayDay()
         val cycle = SalaryCycle.getCurrentPeriod(payDay, now)
+        val rates = exchangeRates.rates.value
 
         val thisCycleIncome = allEntries.filter { e ->
             val d = DateUtils.toLocalDate(e.date)
             SalaryCycle.isInPeriod(d, cycle)
-        }.sumOf { it.amount }
+        }.sumOf { MoneyAggregator.convert(it.amount, it.currency, currency, rates) }
 
-        val cycleSpend = receiptRepo.getTotalSpend(DateUtils.fromLocalDate(cycle.start), DateUtils.fromLocalDate(cycle.end))
+        val cycleSpend = receiptRepo.getReceiptsFromSync(DateUtils.fromLocalDate(cycle.start))
+            .filter { e ->
+                val d = DateUtils.toLocalDate(e.date)
+                SalaryCycle.isInPeriod(d, cycle)
+            }
+            .sumOf { MoneyAggregator.convert(it.total, it.currency, currency, rates) }
         val net = thisCycleIncome - cycleSpend
 
         _totalThisMonth.value = thisCycleIncome
@@ -233,7 +241,9 @@ class IncomeViewModel : ViewModel() {
     }
 
     private fun updateTotal() {
-        val total = _incomeEntries.value.sumOf { it.amount }
+        val total = _incomeEntries.value.sumOf {
+            MoneyAggregator.convert(it.amount, it.currency, currency, exchangeRates.rates.value)
+        }
         _totalText.value = CurrencyFormatter.format(total, currency)
     }
 

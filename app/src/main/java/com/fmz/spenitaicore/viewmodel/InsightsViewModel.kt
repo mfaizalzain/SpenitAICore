@@ -11,6 +11,7 @@ import com.fmz.spenitaicore.util.CurrencyFormatter
 import com.fmz.spenitaicore.util.DateUtils
 import com.fmz.spenitaicore.util.RecurringExpense
 import com.fmz.spenitaicore.util.RecurringExpenseAnalyzer
+import com.fmz.spenitaicore.util.MoneyAggregator
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -23,6 +24,7 @@ class InsightsViewModel : ViewModel() {
     private val incomeRepo = container.incomeRepository
     private val preferences = container.preferences
     private val aiCore = container.aiCoreService
+    private val exchangeRates = container.exchangeRateRepository
 
     private val _selectedRange = MutableStateFlow("Last30")
     val selectedRange: StateFlow<String> = _selectedRange
@@ -161,6 +163,7 @@ class InsightsViewModel : ViewModel() {
     private suspend fun applyInsights(forceAiRefresh: Boolean) {
         val currency = preferences.getDefaultCurrency()
         _currency.value = currency
+        val rates = exchangeRates.rates.value
         val now = LocalDate.now()
 
         val range = selectedRangePeriod(_selectedRange.value, now)
@@ -169,15 +172,15 @@ class InsightsViewModel : ViewModel() {
 
         val receipts = receiptRepo.getReceiptsFromSync(from)
             .filter { it.date <= to }
-        val periodSpend = receipts.sumOf { it.total }
+        val periodSpend = MoneyAggregator.sumReceipts(receipts, currency, rates)
 
         val previousReceipts = receiptRepo.getReceiptsFromSync(DateUtils.fromLocalDate(range.previousStart))
             .filter { it.date <= DateUtils.fromLocalDate(range.previousEnd) }
-        val previousPeriodSpend = previousReceipts.sumOf { it.total }
+        val previousPeriodSpend = MoneyAggregator.sumReceipts(previousReceipts, currency, rates)
 
         val daysElapsed = maxOf(1, ChronoUnit.DAYS.between(range.start, range.end).toInt() + 1)
         val avgDaily = periodSpend / daysElapsed
-        val taxTotal = receipts.filter { it.isTaxDeductible }.sumOf { it.total }
+        val taxTotal = MoneyAggregator.sumReceipts(receipts.filter { it.isTaxDeductible }, currency, rates)
 
         val incomeEntries = incomeRepo.getIncomeEntriesFromSync(from)
             .filter { it.date <= to }
@@ -204,8 +207,12 @@ class InsightsViewModel : ViewModel() {
             .map { (cat, items) ->
                 CategoryBreakdown(
                     category = cat,
-                    amount = items.sumOf { it.total },
-                    percentage = if (periodSpend > 0) (items.sumOf { it.total } / periodSpend) * 100 else 0.0
+                    amount = MoneyAggregator.sumReceipts(items, currency, rates),
+                    percentage = if (periodSpend > 0) {
+                        (MoneyAggregator.sumReceipts(items, currency, rates) / periodSpend) * 100
+                    } else {
+                        0.0
+                    }
                 )
             }
             .sortedByDescending { it.amount }
@@ -223,7 +230,8 @@ class InsightsViewModel : ViewModel() {
                     periodLabel = range.label,
                     currency = currency,
                     periodStart = from,
-                    periodEnd = to
+                    periodEnd = to,
+                    rates = rates
                 )
                 _aiSummary.value = result.summary
                 _keyFindings.value = result.keyFindings

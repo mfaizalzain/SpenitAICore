@@ -8,6 +8,7 @@ import com.fmz.spenitaicore.data.db.entity.ReceiptItem
 import com.fmz.spenitaicore.data.db.entity.IncomeEntry
 import com.fmz.spenitaicore.util.CurrencyFormatter
 import com.fmz.spenitaicore.util.DateUtils
+import com.fmz.spenitaicore.util.MoneyAggregator
 import com.fmz.spenitaicore.util.sortedByNewestReceipt
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -18,6 +19,7 @@ class ExpensesViewModel : ViewModel() {
     private val receiptRepo = container.receiptRepository
     private val incomeRepo = container.incomeRepository
     private val preferences = container.preferences
+    private val exchangeRates = container.exchangeRateRepository
 
     private var allReceipts = emptyList<Receipt>()
 
@@ -280,7 +282,11 @@ class ExpensesViewModel : ViewModel() {
     }
 
     private fun updateTotal() {
-        val total = _filteredReceipts.value.sumOf { it.total }
+        val total = MoneyAggregator.sumReceipts(
+            _filteredReceipts.value,
+            currency,
+            exchangeRates.rates.value
+        )
         _totalText.value = CurrencyFormatter.format(total, currency)
     }
 

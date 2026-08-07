@@ -6,6 +6,7 @@ import com.fmz.spenitaicore.SpenItApp
 import com.fmz.spenitaicore.data.db.entity.Receipt
 import com.fmz.spenitaicore.data.export.ExportService
 import com.fmz.spenitaicore.data.repository.ReceiptRepository
+import com.fmz.spenitaicore.util.MoneyAggregator
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -104,6 +105,7 @@ class TaxReliefViewModel : ViewModel() {
             exportError = null
         )
         val defaultCurrency = preferences.getDefaultCurrency()
+        val rates = container.exchangeRateRepository.rates.value
         try {
             val receipts = receiptRepo.getTaxReceipts(year)
             val grouped = receipts.groupBy { it.taxCategory?.takeIf { cat -> cat.isNotBlank() } ?: "Uncategorised" }
@@ -111,8 +113,8 @@ class TaxReliefViewModel : ViewModel() {
                 TaxCategorySummary(
                     category = cat,
                     receipts = list,
-                    totalTaxAmount = list.sumOf { it.taxAmount },
-                    totalExpense = list.sumOf { it.total }
+                    totalTaxAmount = MoneyAggregator.sumTaxAmounts(list, defaultCurrency, rates),
+                    totalExpense = MoneyAggregator.sumReceipts(list, defaultCurrency, rates)
                 )
             }.sortedByDescending { it.totalExpense }
             val totalTax = categories.sumOf { it.totalTaxAmount }

@@ -42,6 +42,12 @@ class SpenItApp : Application() {
                 BackupWorker.schedule(this@SpenItApp)
             }
         }
+
+        // Warm the exchange-rate cache so currency-aware totals are accurate
+        // as soon as the dashboard loads.
+        CoroutineScope(Dispatchers.IO).launch {
+            container.exchangeRateRepository.ensureLoaded()
+        }
     }
 
     companion object {

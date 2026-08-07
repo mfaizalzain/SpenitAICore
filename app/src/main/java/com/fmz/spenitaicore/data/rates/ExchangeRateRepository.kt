@@ -78,7 +78,7 @@ class ExchangeRateRepository(
             .build()
         return try {
             client.newCall(request).execute().use { response ->
-                if (response.isSuccessful) response.body?.string() else null
+                if (response.isSuccessful) response.body.string() else null
             }
         } catch (_: Exception) {
             null
@@ -87,7 +87,7 @@ class ExchangeRateRepository(
 
     private fun parseRates(json: String): Map<String, Double>? {
         return try {
-            val root = Json { ignoreUnknownKeys = true }.parseToJsonElement(json).jsonObject
+            val root = jsonParser.parseToJsonElement(json).jsonObject
             val ratesObj = root["rates"]?.jsonObject ?: return null
             ratesObj.mapNotNull { (code, value) ->
                 value.jsonPrimitive.doubleOrNull?.let { code to it }
@@ -99,6 +99,7 @@ class ExchangeRateRepository(
 
     companion object {
         private const val RATES_TTL_MS = 24 * 60 * 60 * 1000L
+        private val jsonParser = Json { ignoreUnknownKeys = true }
 
         /** Approximate USD-based rates used when the network is unavailable. */
         val FALLBACK_RATES = mapOf(

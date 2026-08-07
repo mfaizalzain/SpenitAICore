@@ -12,6 +12,7 @@ import com.fmz.spenitaicore.util.CurrencyFormatter
 import com.fmz.spenitaicore.util.DateUtils
 import com.fmz.spenitaicore.util.SalaryCycle
 import com.fmz.spenitaicore.util.SalaryCyclePeriod
+import com.fmz.spenitaicore.util.MoneyAggregator
 import com.fmz.spenitaicore.util.sortedByNewestReceipt
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -27,6 +28,7 @@ class DashboardViewModel : ViewModel() {
     private val incomeRepo = container.incomeRepository
     private val preferences = container.preferences
     private val aiCore = container.aiCoreService
+    private val exchangeRates = container.exchangeRateRepository
 
     private val _greeting = MutableStateFlow("")
     val greeting: StateFlow<String> = _greeting
@@ -193,17 +195,19 @@ class DashboardViewModel : ViewModel() {
             _isRefreshing.value = true
             combine(
                 receiptRepo.getReceiptsFrom(cutoffStr),
-                incomeRepo.getIncomeEntriesFrom(cutoffStr)
-            ) { receipts, income ->
-                val currency = preferences.getDefaultCurrency()
+                incomeRepo.getIncomeEntriesFrom(cutoffStr),
+                preferences.defaultCurrency,
+                exchangeRates.rates
+            ) { receipts, income, currency, rates ->
                 val payDay = preferences.getSalaryPayDay()
                 val cycle = SalaryCycle.getCurrentPeriod(payDay, now)
-                val metrics = computeMetrics(receipts, income, now, cycle)
+                val metrics = computeMetrics(receipts, income, now, cycle, currency, rates)
                 PipelineData(
                     metrics = metrics,
                     allReceipts = receipts,
                     allIncome = income,
                     currency = currency,
+                    rates = rates,
                     cycle = cycle,
                     now = now
                 )
@@ -223,7 +227,9 @@ class DashboardViewModel : ViewModel() {
         allReceipts: List<Receipt>,
         allIncome: List<IncomeEntry>,
         now: LocalDate,
-        cycle: SalaryCyclePeriod
+        cycle: SalaryCyclePeriod,
+        currency: String,
+        rates: Map<String, Double>
     ): DashboardMetrics {
         var todayTotal = 0.0
         var weekTotal = 0.0
@@ -236,29 +242,31 @@ class DashboardViewModel : ViewModel() {
         val thisYear = now.year.toString()
 
         for (r in allReceipts) {
+            val amount = MoneyAggregator.convert(r.total, r.currency, currency, rates)
             val d = DateUtils.toLocalDate(r.date)
             if (SalaryCycle.isInPeriod(d, cycle)) {
-                thisCycleCost += r.total
+                thisCycleCost += amount
             }
             if (!d.isBefore(cycle.previousStart) && !d.isAfter(cycle.previousEnd)) {
-                lastCycleCost += r.total
+                lastCycleCost += amount
             }
             if (r.date == todayDate) {
-                todayTotal += r.total
+                todayTotal += amount
             }
             if (r.date >= weekStart && r.date <= todayDate) {
-                weekTotal += r.total
+                weekTotal += amount
             }
             if (r.isTaxDeductible && (r.taxYear == thisYear || r.date.startsWith(thisYear))) {
-                taxTotal += r.total
+                taxTotal += amount
             }
         }
 
         var thisCycleIncome = 0.0
         for (e in allIncome) {
+            val amount = MoneyAggregator.convert(e.amount, e.currency, currency, rates)
             val d = DateUtils.toLocalDate(e.date)
             if (SalaryCycle.isInPeriod(d, cycle)) {
-                thisCycleIncome += e.amount
+                thisCycleIncome += amount
             }
         }
 
@@ -357,7 +365,8 @@ class DashboardViewModel : ViewModel() {
                     periodLabel = "this cycle",
                     currency = currency,
                     periodStart = DateUtils.fromLocalDate(cycle.start),
-                    periodEnd = DateUtils.fromLocalDate(cycle.end)
+                    periodEnd = DateUtils.fromLocalDate(cycle.end),
+                    rates = data.rates
                 )
                 _latestInsightSummary.value = insightResult.summary
                 _latestInsightFinding.value = insightResult.keyFindings.firstOrNull() ?: ""
@@ -495,6 +504,7 @@ private data class PipelineData(
     val allReceipts: List<Receipt>,
     val allIncome: List<IncomeEntry>,
     val currency: String,
+    val rates: Map<String, Double>,
     val cycle: SalaryCyclePeriod,
     val now: LocalDate
 )

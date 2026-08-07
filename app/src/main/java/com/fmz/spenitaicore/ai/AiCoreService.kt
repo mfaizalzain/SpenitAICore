@@ -1088,13 +1088,14 @@ Rules:
         periodLabel: String,
         currency: String,
         periodStart: String? = null,
-        periodEnd: String? = null
+        periodEnd: String? = null,
+        rates: Map<String, Double> = emptyMap()
     ): AiInsightResult {
-        val fallback = buildRuleBasedInsights(receipts, incomeEntries, periodLabel, currency, periodStart, periodEnd)
+        val fallback = buildRuleBasedInsights(receipts, incomeEntries, periodLabel, currency, periodStart, periodEnd, rates)
         if (receipts.isEmpty()) return fallback
 
         return try {
-            val prompt = buildInsightsPrompt(receipts, incomeEntries, fallback, periodLabel, currency, periodStart, periodEnd)
+            val prompt = buildInsightsPrompt(receipts, incomeEntries, fallback, periodLabel, currency, periodStart, periodEnd, rates)
             var jsonStr = if (isRemoteConfigured() && remoteAiService.isOnline()) {
                 tryRemoteText(prompt)
             } else {
@@ -1119,18 +1120,21 @@ Rules:
         periodLabel: String,
         currency: String,
         periodStart: String?,
-        periodEnd: String?
+        periodEnd: String?,
+        rates: Map<String, Double>
     ): AiInsightResult {
-        val total = receipts.sumOf { it.total }
+        val total = com.fmz.spenitaicore.util.MoneyAggregator.sumReceipts(receipts, currency, rates)
         val dayCount = insightDayCount(receipts, periodStart, periodEnd)
         val avgDaily = if (dayCount > 0) total / dayCount else 0.0
-        val taxDeductible = receipts.filter { it.isTaxDeductible }.sumOf { it.total }
-        val totalIncome = incomeEntries.sumOf { it.amount }
+        val taxDeductible = com.fmz.spenitaicore.util.MoneyAggregator.sumReceipts(
+            receipts.filter { it.isTaxDeductible }, currency, rates
+        )
+        val totalIncome = com.fmz.spenitaicore.util.MoneyAggregator.sumIncomes(incomeEntries, currency, rates)
         val netCash = totalIncome - total
 
         val categories = receipts.groupBy { it.category }
             .map { (cat, items) ->
-                val amount = items.sumOf { it.total }
+                val amount = com.fmz.spenitaicore.util.MoneyAggregator.sumReceipts(items, currency, rates)
                 CategoryBreakdown(
                     category = cat,
                     amount = amount,
@@ -1149,7 +1153,8 @@ Rules:
             try {
                 val localDate = java.time.LocalDate.parse(r.date)
                 val dayIdx = localDate.dayOfWeek.value - 1 // 0=Mon
-                weeklyTrend[dayIdx] = weeklyTrend[dayIdx] + r.total
+                weeklyTrend[dayIdx] = weeklyTrend[dayIdx] +
+                    com.fmz.spenitaicore.util.MoneyAggregator.convert(r.total, r.currency, currency, rates)
             } catch (_: Exception) { }
         }
         val maxWeekSpend = weeklyTrend.maxOrNull()?.coerceAtLeast(1.0) ?: 1.0
@@ -1204,7 +1209,8 @@ Rules:
         periodLabel: String,
         currency: String,
         periodStart: String?,
-        periodEnd: String?
+        periodEnd: String?,
+        rates: Map<String, Double>
     ): String {
         val topCategories = fallback.categoryBreakdown.joinToString("\n") {
             "- ${it.category}: ${formatAmountForPrompt(it.amount, currency)} (${ "%.0f".format(it.percentage) }%)"
@@ -1213,7 +1219,9 @@ Rules:
             "- ${it.date} | ${it.category} | ${it.merchant.ifBlank { "Unknown merchant" }} | ${formatAmountForPrompt(it.total, currency)}${if (it.isTaxDeductible) " | tax-deductible" else ""}"
         }
         val incomeSummary = incomeEntries.groupBy { it.category }
-            .map { (category, items) -> category to items.sumOf { it.amount } }
+            .map { (category, items) ->
+                category to com.fmz.spenitaicore.util.MoneyAggregator.sumIncomes(items, currency, rates)
+            }
             .sortedByDescending { it.second }
             .joinToString("\n") { "- ${it.first}: ${formatAmountForPrompt(it.second, currency)}" }
             .ifBlank { "- No income recorded" }
@@ -1229,7 +1237,7 @@ Rules:
             - Currency: $currency
 
             Computed metrics:
-            - Total spending: ${formatAmountForPrompt(receipts.sumOf { it.total }, currency)}
+            - Total spending: ${formatAmountForPrompt(com.fmz.spenitaicore.util.MoneyAggregator.sumReceipts(receipts, currency, rates), currency)}
             - Average daily spending: ${formatAmountForPrompt(fallback.averageDailySpend, currency)}
             - Tax-deductible spending: ${formatAmountForPrompt(fallback.taxDeductibleTotal, currency)}
             - Transaction count: ${receipts.size}
