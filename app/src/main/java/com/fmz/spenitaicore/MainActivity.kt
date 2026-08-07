@@ -42,6 +42,10 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import com.fmz.spenitaicore.widget.SpendWidget
+import androidx.glance.appwidget.GlanceAppWidgetManager
 import java.util.UUID
 
 class MainActivity : AppCompatActivity() {
@@ -180,6 +184,14 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         maybePromptUnlock()
+        // Keep the home-screen widget in sync with the latest data.
+        CoroutineScope(Dispatchers.IO).launch {
+            val manager = GlanceAppWidgetManager(this@MainActivity)
+            val widget = SpendWidget()
+            manager.getGlanceIds(SpendWidget::class.java).forEach { id ->
+                widget.update(this@MainActivity, id)
+            }
+        }
     }
 
     private fun maybePromptUnlock() {

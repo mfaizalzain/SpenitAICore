@@ -146,6 +146,9 @@ dependencies {
     // WorkManager (nightly backup scheduling)
     implementation("androidx.work:work-runtime-ktx:2.11.2")
 
+    // Home-screen widget (Glance)
+    implementation("androidx.glance:glance-appwidget:1.1.1")
+
     // Biometrics
     implementation("androidx.biometric:biometric:1.1.0")
 
