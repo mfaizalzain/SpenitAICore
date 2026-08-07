@@ -76,7 +76,7 @@ class DriveBackupService(private val context: Context) {
         return try {
             val token = GoogleAuthUtil.getToken(
                 context, account, DRIVE_SCOPE
-            ) ?: return BackupResult(false, "Failed to get Drive access token")
+            )
 
             // Find or create the SpenItBackups folder
             val folderId = findFolderId(token, APP_DATA_FOLDER)
@@ -113,7 +113,7 @@ class DriveBackupService(private val context: Context) {
         return try {
             val token = GoogleAuthUtil.getToken(
                 context, account, DRIVE_SCOPE
-            ) ?: return emptyList()
+            )
 
             val folderId = findFolderId(token, APP_DATA_FOLDER)
                 ?: return emptyList()
@@ -158,7 +158,7 @@ class DriveBackupService(private val context: Context) {
         return try {
             val token = GoogleAuthUtil.getToken(
                 context, account, DRIVE_SCOPE
-            ) ?: return null
+            )
 
             val url = "https://www.googleapis.com/drive/v3/files/$fileId?alt=media"
             val conn = (URL(url).openConnection() as HttpURLConnection).apply {
@@ -361,9 +361,9 @@ class DriveBackupService(private val context: Context) {
                     val name = entry.name
                     val targetFile = when {
                         name == "spenit.db" -> File(dbDir, "spenit.db")
-                        name.startsWith("files/") -> File(filesDir, name.removePrefix("files/"))
-                        name.startsWith("cache/") -> File(cacheDir, name.removePrefix("cache/"))
-                        name.startsWith("media/") -> File(filesDir, "shared_imports/${name.removePrefix("media/")}")
+                        name.startsWith("files/") -> safeResolve(filesDir, name.removePrefix("files/"))
+                        name.startsWith("cache/") -> safeResolve(cacheDir, name.removePrefix("cache/"))
+                        name.startsWith("media/") -> safeResolve(File(filesDir, "shared_imports"), name.removePrefix("media/"))
                         else -> null
                     }
                     if (targetFile != null) {
@@ -379,5 +379,22 @@ class DriveBackupService(private val context: Context) {
             Log.e(TAG, "Failed to extract backup package", e)
             false
         }
+    }
+
+    /**
+     * Resolves a relative path inside [root] while guarding against
+     * zip-slip path traversal (e.g. "files/../../evil").
+     */
+    private fun safeResolve(root: File, relativePath: String): File? {
+        val clean = relativePath.trimStart('/')
+        if (clean.isEmpty() || clean.split('/').any { it == ".." }) return null
+        val target = File(root, clean)
+        val canonicalRoot = root.canonicalPath
+        val canonicalTarget = try {
+            target.canonicalPath
+        } catch (e: Exception) {
+            return null
+        }
+        return if (canonicalTarget.startsWith(canonicalRoot)) target else null
     }
 }

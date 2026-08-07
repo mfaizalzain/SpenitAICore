@@ -152,7 +152,7 @@ class IncomeViewModel : ViewModel() {
 
     private fun tryApplySmartSearch(query: String): Boolean {
         // ">500" or "above:500"
-        Regex("""^(?:>\s*|above[:\\s]*)(\d+(?:\.\d+)?)$""", RegexOption.IGNORE_CASE).find(query)?.let {
+        Regex("""^(?:>\s*|above[:\s]*)(\d+(?:\.\d+)?)$""", RegexOption.IGNORE_CASE).find(query)?.let {
             val min = it.groupValues[1].toDoubleOrNull() ?: return@let
             _searchQuery.value = ""
             _incomeEntries.value = allEntries.filter { e -> e.amount >= min }
@@ -161,7 +161,7 @@ class IncomeViewModel : ViewModel() {
         }
 
         // "<100"
-        Regex("""^(?:<\s*|below[:\\s]*)(\d+(?:\.\d+)?)$""", RegexOption.IGNORE_CASE).find(query)?.let {
+        Regex("""^(?:<\s*|below[:\s]*)(\d+(?:\.\d+)?)$""", RegexOption.IGNORE_CASE).find(query)?.let {
             val max = it.groupValues[1].toDoubleOrNull() ?: return@let
             _searchQuery.value = ""
             _incomeEntries.value = allEntries.filter { e -> e.amount <= max }

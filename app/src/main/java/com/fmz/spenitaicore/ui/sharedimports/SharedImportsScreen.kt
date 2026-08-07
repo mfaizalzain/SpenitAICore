@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
@@ -139,7 +141,7 @@ fun SharedImportsScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
                 actions = {
@@ -418,7 +420,7 @@ fun ImportItemCard(
                     }
                     if (item.isCompleted) {
                         IconButton(onClick = onViewCompleted, modifier = Modifier.size(36.dp)) {
-                            Icon(Icons.Filled.OpenInNew, "View",
+                            Icon(Icons.AutoMirrored.Filled.OpenInNew, "View",
                                 tint = MaterialTheme.colorScheme.primary)
                         }
                         IconButton(onClick = onShare, modifier = Modifier.size(36.dp)) {

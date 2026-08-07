@@ -400,7 +400,7 @@ fun PaySlipScanScreen(
                 label = { Text("Net Income Amount *") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
             )
 
             // Date

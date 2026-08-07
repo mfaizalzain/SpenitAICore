@@ -8,6 +8,7 @@ import com.fmz.spenitaicore.data.db.entity.ReceiptItem
 import com.fmz.spenitaicore.data.db.entity.IncomeEntry
 import com.fmz.spenitaicore.util.CurrencyFormatter
 import com.fmz.spenitaicore.util.DateUtils
+import com.fmz.spenitaicore.util.sortedByNewestReceipt
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
@@ -373,7 +374,4 @@ class ExpensesViewModel : ViewModel() {
     fun setIsRefreshing(value: Boolean) {
         _isRefreshing.value = value
     }
-
-    private fun List<Receipt>.sortedByNewestReceipt(): List<Receipt> =
-        sortedWith(compareByDescending<Receipt> { it.date }.thenByDescending { it.createdAt })
 }

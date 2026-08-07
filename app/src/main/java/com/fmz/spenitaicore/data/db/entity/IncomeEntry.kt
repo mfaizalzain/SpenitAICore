@@ -40,6 +40,10 @@ data class IncomeEntry(
             "Gift" -> "\uD83C\uDF80"
             "Refund" -> "\uD83D\uDD04"
             "Commision" -> "\uD83E\uDD1D"
+            "Commission" -> "\uD83E\uDD1D"
+            "Dividend" -> "\uD83D\uDCC8"
+            "Royalty" -> "\uD83D\uDC51"
+            "Transfer" -> "\uD83D\uDD04"
             else -> "\uD83D\uDCB0"
         }
     }
@@ -48,7 +52,8 @@ data class IncomeEntry(
 object IncomeSources {
     val All = listOf(
         "Salary", "Freelance", "Business", "Investment", "Rental",
-        "Bonus", "Gift", "Refund", "Commision", "Other Income"
+        "Bonus", "Gift", "Refund", "Commission", "Commision",
+        "Dividend", "Royalty", "Transfer", "Other Income"
     )
 }
 

@@ -15,7 +15,6 @@ import com.fmz.spenitaicore.data.db.entity.SharedImportKind
 import com.fmz.spenitaicore.data.db.entity.SharedImportStatus
 import com.fmz.spenitaicore.data.notification.ImportNotificationHelper
 import com.fmz.spenitaicore.util.DateUtils
-import com.fmz.spenitaicore.util.PendingSharedFiles
 import com.fmz.spenitaicore.util.FileUtils
 import com.fmz.spenitaicore.R
 import kotlinx.coroutines.Dispatchers
@@ -46,34 +45,7 @@ class SharedImportsViewModel : ViewModel() {
     init {
         _imports.value = sharedImportStore.load()
         refreshSummary()
-        drainPendingFiles()
         classifyPendingImports()
-    }
-
-    fun drainPendingFiles() {
-        val existingIds = _imports.value.map { it.id }.toSet()
-        val persisted = sharedImportStore.load()
-        val pending = PendingSharedFiles.drain()
-        val pendingItems = pending.map { entry ->
-            SharedImportItem(
-                id = UUID.randomUUID().toString(),
-                filePath = entry.filePath,
-                displayName = entry.displayName,
-                kind = SharedImportKind.Unknown,
-                status = SharedImportStatus.NeedsReview
-            )
-        }
-        val merged = (persisted + pendingItems).distinctBy { it.id }
-        if (merged != _imports.value) {
-            setImports(merged)
-        }
-        val newItems = merged.filter { it.id !in existingIds }
-        val itemsToClassify = newItems.filter {
-            it.kind == SharedImportKind.Unknown && it.status == SharedImportStatus.NeedsReview
-        }
-        if (itemsToClassify.isNotEmpty()) {
-            classifyImports(itemsToClassify)
-        }
     }
 
     private fun classifyPendingImports() {
@@ -85,6 +57,20 @@ class SharedImportsViewModel : ViewModel() {
         if (itemsToClassify.isNotEmpty()) {
             classifyImports(itemsToClassify)
         }
+    }
+
+    /**
+     * Merges any items persisted on disk (e.g. added before this screen was
+     * created) with the in-memory list and re-runs classification for any
+     * items still waiting to be typed.
+     */
+    fun drainPendingFiles() {
+        val persisted = sharedImportStore.load()
+        val merged = (persisted + _imports.value).distinctBy { it.id }
+        if (merged != _imports.value) {
+            setImports(merged)
+        }
+        classifyPendingImports()
     }
 
     fun addFiles(filePaths: List<String>, displayNames: List<String>) {
@@ -129,11 +115,19 @@ class SharedImportsViewModel : ViewModel() {
         })
     }
 
+    /** Tracks item IDs currently being classified so we never run two AI
+     *  classification passes on the same item concurrently. */
+    private val classifyingIds = mutableSetOf<String>()
+
     private fun classifyImports(items: List<SharedImportItem>) {
+        val newItems = items.filter { it.id !in classifyingIds }
+        if (newItems.isEmpty()) return
+        classifyingIds.addAll(newItems.map { it.id })
+
         viewModelScope.launch {
             // Mark all items as "In Queue" first so the UI shows the right state
             setImports(_imports.value.map { item ->
-                if (items.any { it.id == item.id }) {
+                if (newItems.any { it.id == item.id }) {
                     item.copy(
                         status = SharedImportStatus.InQueue,
                         statusMessage = "In queue for AI classification"
@@ -141,42 +135,46 @@ class SharedImportsViewModel : ViewModel() {
                 } else item
             })
 
-            items.forEach { item ->
-                val isPdf = item.filePath.lowercase().endsWith(".pdf")
-                if (isPdf && FileUtils.isPdfPasswordProtected(appContext, item.filePath)) {
+            try {
+                newItems.forEach { item ->
+                    val isPdf = item.filePath.lowercase().endsWith(".pdf")
+                    if (isPdf && FileUtils.isPdfPasswordProtected(appContext, item.filePath)) {
+                        setImports(_imports.value.map {
+                            if (it.id == item.id) it.copy(
+                                status = SharedImportStatus.Failed,
+                                statusMessage = appContext.getString(R.string.pdf_password_protected)
+                            ) else it
+                        })
+                        notifyImportResult(item.id, item.displayName)
+                        return@forEach
+                    }
+
                     setImports(_imports.value.map {
                         if (it.id == item.id) it.copy(
-                            status = SharedImportStatus.Failed,
-                            statusMessage = appContext.getString(R.string.pdf_password_protected)
+                            status = SharedImportStatus.Processing,
+                            statusMessage = "Classifying..."
                         ) else it
                     })
-                    notifyImportResult(item.id, item.displayName)
-                    return@forEach
-                }
-
-                setImports(_imports.value.map {
-                    if (it.id == item.id) it.copy(
-                        status = SharedImportStatus.Processing,
-                        statusMessage = "Classifying..."
-                    ) else it
-                })
-                val kind = aiCore.classifyFinancialDocument(item.filePath).toSharedImportKind()
-                val currentItem = _imports.value.firstOrNull { it.id == item.id } ?: item
-                val updatedItem = if (kind == SharedImportKind.Unknown) {
-                    currentItem.copy(statusMessage = "Choose a type to import")
-                } else {
-                    currentItem.copy(kind = kind, statusMessage = "Detected ${kind.displayName()}")
-                }
-                setImports(_imports.value.map {
-                    if (it.id == item.id) updatedItem else it
-                })
-
-                if (kind != SharedImportKind.Unknown) {
+                    val kind = aiCore.classifyFinancialDocument(item.filePath).toSharedImportKind()
+                    val currentItem = _imports.value.firstOrNull { it.id == item.id } ?: item
+                    val updatedItem = if (kind == SharedImportKind.Unknown) {
+                        currentItem.copy(statusMessage = "Choose a type to import")
+                    } else {
+                        currentItem.copy(kind = kind, statusMessage = "Detected ${kind.displayName()}")
+                    }
                     setImports(_imports.value.map {
-                        if (it.id == item.id) it.copy(statusMessage = "Auto-processing ${kind.displayName()}...") else it
+                        if (it.id == item.id) updatedItem else it
                     })
-                    doProcessImport(updatedItem)
+
+                    if (kind != SharedImportKind.Unknown) {
+                        setImports(_imports.value.map {
+                            if (it.id == item.id) it.copy(statusMessage = "Auto-processing ${kind.displayName()}...") else it
+                        })
+                        doProcessImport(updatedItem)
+                    }
                 }
+            } finally {
+                classifyingIds.removeAll(newItems.map { it.id })
             }
         }
     }
@@ -423,12 +421,6 @@ class SharedImportsViewModel : ViewModel() {
 
     private fun refreshSummary() {
         _pendingCount.value = _imports.value.size
-    }
-
-    private fun setStatusMessage(itemId: String, message: String?) {
-        setImports(_imports.value.map {
-            if (it.id == itemId) it.copy(statusMessage = message) else it
-        })
     }
 
     private fun FinancialDocumentType.toSharedImportKind(): SharedImportKind {

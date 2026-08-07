@@ -12,6 +12,7 @@ import com.fmz.spenitaicore.util.CurrencyFormatter
 import com.fmz.spenitaicore.util.DateUtils
 import com.fmz.spenitaicore.util.SalaryCycle
 import com.fmz.spenitaicore.util.SalaryCyclePeriod
+import com.fmz.spenitaicore.util.sortedByNewestReceipt
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
@@ -176,14 +177,7 @@ class DashboardViewModel : ViewModel() {
     }
 
     fun loadData() {
-        viewModelScope.launch {
-            _isRefreshing.value = true
-            try {
-                kotlinx.coroutines.delay(500)
-            } finally {
-                _isRefreshing.value = false
-            }
-        }
+        // Data is reactive via observeDataPipeline(); nothing to refresh here.
     }
 
     fun quietLoad() {
@@ -340,9 +334,26 @@ class DashboardViewModel : ViewModel() {
                     }
                     Pair(filteredReceipts, filteredIncome)
                 }
+                val (filteredReceipts, filteredIncome) = filteredData
+                val signature = buildString {
+                    append(filteredReceipts.size).append(':')
+                    append(filteredReceipts.sumOf { it.total }).append(':')
+                    append(filteredIncome.size).append(':')
+                    append(filteredIncome.sumOf { it.amount }).append(':')
+                    append(cycle.label)
+                }
+                // Skip regenerating when the data set is unchanged and the last
+                // generation is still fresh — avoids repeated on-device AI calls
+                // on every DB emission.
+                val now = System.currentTimeMillis()
+                if (signature == lastInsightSignature && now - lastInsightTime < INSIGHT_COOLDOWN_MS) {
+                    return@launch
+                }
+                lastInsightSignature = signature
+                lastInsightTime = now
                 val insightResult = aiCore.generateInsights(
-                    receipts = filteredData.first,
-                    incomeEntries = filteredData.second,
+                    receipts = filteredReceipts,
+                    incomeEntries = filteredIncome,
                     periodLabel = "this cycle",
                     currency = currency,
                     periodStart = DateUtils.fromLocalDate(cycle.start),
@@ -352,6 +363,13 @@ class DashboardViewModel : ViewModel() {
                 _latestInsightFinding.value = insightResult.keyFindings.firstOrNull() ?: ""
             } catch (_: Exception) { }
         }
+    }
+
+    private var lastInsightSignature: String? = null
+    private var lastInsightTime = 0L
+
+    companion object {
+        private const val INSIGHT_COOLDOWN_MS = 5 * 60 * 1000L
     }
 
     private fun updateFinancialStatus(safeToSpend: Double, totalIncome: Double) {
@@ -477,6 +495,3 @@ private data class PipelineData(
     val cycle: SalaryCyclePeriod,
     val now: LocalDate
 )
-
-private fun List<Receipt>.sortedByNewestReceipt(): List<Receipt> =
-    sortedWith(compareByDescending<Receipt> { it.date }.thenByDescending { it.createdAt })

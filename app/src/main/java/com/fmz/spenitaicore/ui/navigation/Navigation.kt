@@ -268,7 +268,7 @@ fun SpenItNavHost(
                 )
                 if (incomeEntryId > 0) {
                     LaunchedEffect(incomeEntryId) {
-                        scanViewModel.prepareEdit(incomeEntryId)
+                        scanViewModel.prepareEditIncome(incomeEntryId)
                     }
                 }
                 PaySlipScanScreen(

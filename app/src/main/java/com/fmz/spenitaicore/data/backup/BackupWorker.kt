@@ -84,6 +84,7 @@ class BackupWorker(
 
             val dateStr = SimpleDateFormat("yyyy-MM-dd_HHmm", Locale.US).format(Date())
             val fileName = "SpenIt_Backup_$dateStr.zip"
+            val sizeKb = zipFile.length() / 1024
 
             val result = driveService.uploadBackup(account, zipFile, fileName)
 
@@ -91,7 +92,6 @@ class BackupWorker(
             zipFile.delete()
 
             if (result.success) {
-                val sizeKb = zipFile.length() / 1024
                 BackupNotificationHelper.showBackupSuccess(context, fileName, sizeKb)
                 Log.i(TAG, "Nightly backup successful: ${result.driveFileId}")
                 return Result.success()

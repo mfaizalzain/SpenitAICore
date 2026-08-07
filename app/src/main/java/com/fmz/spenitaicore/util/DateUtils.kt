@@ -1,5 +1,6 @@
 package com.fmz.spenitaicore.util
 
+import com.fmz.spenitaicore.data.db.entity.Receipt
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -56,3 +57,7 @@ object DateUtils {
         else -> "Good evening"
     }
 }
+
+/** Sorts receipts newest-first by transaction date, then by creation time. */
+fun List<Receipt>.sortedByNewestReceipt(): List<Receipt> =
+    sortedWith(compareByDescending<Receipt> { it.date }.thenByDescending { it.createdAt })

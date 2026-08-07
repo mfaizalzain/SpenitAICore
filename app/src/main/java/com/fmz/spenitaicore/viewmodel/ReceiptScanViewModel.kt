@@ -212,6 +212,10 @@ class ReceiptScanViewModel(
 
     fun prepareEdit(receiptId: Int) {
         viewModelScope.launch {
+            if (isIncome) {
+                prepareEditIncome(receiptId)
+                return@launch
+            }
             editReceiptId = receiptId
             val receipt = receiptRepo.getReceiptById(receiptId) ?: return@launch
             _merchant.value = receipt.merchant
@@ -231,6 +235,26 @@ class ReceiptScanViewModel(
                 Json.decodeFromString<List<String>>(receipt.tagsJson)
             } catch (e: Exception) { emptyList() }
             _tagsInput.value = tags.joinToString(", ")
+        }
+    }
+
+    /**
+     * Loads an existing income entry into the form for editing.
+     * Income entries live in a different table than receipts, so this
+     * must query the income repository instead of the receipt repository.
+     */
+    fun prepareEditIncome(incomeEntryId: Int) {
+        viewModelScope.launch {
+            editReceiptId = incomeEntryId
+            val entry = incomeRepo.getIncomeEntryById(incomeEntryId) ?: return@launch
+            _merchant.value = entry.source
+            _date.value = entry.date
+            _total.value = entry.amount
+            _currency.value = entry.currency
+            _category.value = entry.category
+            _notes.value = entry.notes
+            _imagePath.value = entry.imagePath
+            _hasImage.value = !entry.imagePath.isNullOrEmpty()
         }
     }
 

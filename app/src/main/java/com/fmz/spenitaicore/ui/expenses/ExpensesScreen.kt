@@ -6,12 +6,15 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -135,7 +138,7 @@ fun ExpensesScreen(
                     } else {
                         IconButton(onClick = { viewModel.applySearchFilters() },
                             modifier = Modifier.size(24.dp)) {
-                            Icon(Icons.Filled.KeyboardArrowRight, contentDescription = "Search",
+                            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Search",
                                 modifier = Modifier.size(16.dp))
                         }
                     }
@@ -330,7 +333,8 @@ fun ExpensesScreen(
                 onValueChange = { currentAmount = it },
                 label = { Text("Amount") },
                 modifier = Modifier.fillMaxWidth(),
-                singleLine = true
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
             )
             Spacer(modifier = Modifier.height(8.dp))
             Box {

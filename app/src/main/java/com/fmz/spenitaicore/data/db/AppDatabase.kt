@@ -52,7 +52,7 @@ abstract class AppDatabase : RoomDatabase() {
                 AppDatabase::class.java,
                 "spenit.db"
             )
-                .fallbackToDestructiveMigration()
+                .fallbackToDestructiveMigration(dropAllTables = true)
                 .build()
         }
     }
