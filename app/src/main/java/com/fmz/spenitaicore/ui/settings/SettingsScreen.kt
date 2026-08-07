@@ -73,12 +73,6 @@ fun SettingsScreen(
 
     // ── AI Provider dialog state ────────────────────────────
     var showAiProviderDialog by remember { mutableStateOf(false) }
-    var aiDialogProvider by remember { mutableStateOf("") }
-    var aiDialogKey by remember { mutableStateOf("") }
-    var aiDialogModel by remember { mutableStateOf("") }
-    var aiDialogCustomUrl by remember { mutableStateOf("") }
-    var showAiProviderDropdown by remember { mutableStateOf(false) }
-    var showAiModelDropdown by remember { mutableStateOf(false) }
 
     // ── Backup state ────────────────────────────────────────────
     val isBackupEnabled by viewModel.isBackupEnabled.collectAsStateWithLifecycle()
@@ -512,13 +506,7 @@ fun SettingsScreen(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 OutlinedButton(
-                                    onClick = {
-                                        aiDialogProvider = aiProvider
-                                        aiDialogKey = aiApiKey
-                                        aiDialogModel = aiModel
-                                        aiDialogCustomUrl = aiCustomUrl
-                                        showAiProviderDialog = true
-                                    },
+                                    onClick = { showAiProviderDialog = true },
                                     modifier = Modifier.weight(1f)
                                 ) {
                                     Icon(Icons.Filled.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
@@ -541,13 +529,7 @@ fun SettingsScreen(
                         } else if (aiProvider == "aicore") {
                             // On-device — let user switch to a remote provider
                             OutlinedButton(
-                                onClick = {
-                                    aiDialogProvider = "gemini"
-                                    aiDialogKey = ""
-                                    aiDialogModel = "gemini-flash-lite-latest"
-                                    aiDialogCustomUrl = ""
-                                    showAiProviderDialog = true
-                                },
+                                onClick = { showAiProviderDialog = true },
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(16.dp))
@@ -832,407 +814,42 @@ fun SettingsScreen(
         }
     }
 
-    // ── Restore dialogs ───────────────────────────────────────────
+    RestoreBackupDialogs(
+        isLoadingBackups = isLoadingBackups,
+        availableBackups = availableBackups,
+        restoreError = restoreError,
+        isRestoring = isRestoring,
+        restoreSuccess = restoreSuccess,
+        selectedBackupForRestore = selectedBackupForRestore,
+        onDismissList = { viewModel.clearBackupList() },
+        onSelectBackup = { viewModel.selectBackupForRestore(it) },
+        onConfirmRestore = { viewModel.confirmRestore() },
+        onRestart = { viewModel.restartApp() },
+        onClearRestoreResult = { viewModel.clearRestoreResult() }
+    )
 
-    // Backup list dialog
-    if (isLoadingBackups || availableBackups.isNotEmpty() || restoreError != null) {
-        AlertDialog(
-            onDismissRequest = viewModel::clearBackupList,
-            title = { Text("Restore from Backup") },
-            text = {
-                Column {
-                    if (isLoadingBackups) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
-                            Text("Loading backups...")
-                        }
-                    } else if (restoreError != null && availableBackups.isEmpty()) {
-                        Text(restoreError!!, color = MaterialTheme.colorScheme.error)
-                    } else {
-                        Text(
-                            "Select a backup to restore. This will replace all current data.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        availableBackups.take(5).forEach { backup ->
-                            val isSelected = selectedBackupForRestore?.id == backup.id
-                            Card(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 2.dp)
-                                    .clickable { viewModel.selectBackupForRestore(backup) },
-                                colors = CardDefaults.cardColors(
-                                    containerColor = if (isSelected)
-                                        MaterialTheme.colorScheme.primaryContainer
-                                    else
-                                        MaterialTheme.colorScheme.surfaceVariant
-                                )
-                            ) {
-                                Column(modifier = Modifier.padding(12.dp)) {
-                                    Text(backup.name, fontWeight = FontWeight.Medium,
-                                        style = MaterialTheme.typography.bodyMedium)
-                                    Text(
-                                        "${formatFileSize(backup.sizeBytes)} · ${formatDriveDate(backup.createdTime)}",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = { viewModel.confirmRestore() },
-                    enabled = selectedBackupForRestore != null && !isRestoring
-                ) {
-                    Text("Restore")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { viewModel.clearBackupList() }) {
-                    Text("Cancel")
-                }
-            }
-        )
-    }
+    AiProviderDialog(
+        visible = showAiProviderDialog,
+        currentApiKey = aiApiKey,
+        currentProvider = aiProvider,
+        currentModel = aiModel,
+        currentCustomUrl = aiCustomUrl,
+        providerNames = aiProviderNames,
+        providerKeys = aiProviderKeys,
+        providerModels = aiProviderModels,
+        onSave = { provider, key, model, customUrl ->
+            viewModel.saveAiApiKey(provider, key, model, customUrl)
+        },
+        onDismiss = { showAiProviderDialog = false }
+    )
 
-    // Restoring progress
-    if (isRestoring) {
-        AlertDialog(
-            onDismissRequest = { },
-            title = { Text("Restoring...") },
-            text = {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
-                    Text("Downloading and restoring backup...")
-                }
-            },
-            confirmButton = { },
-            dismissButton = { }
-        )
-    }
-
-    // Restore success
-    if (restoreSuccess) {
-        AlertDialog(
-            onDismissRequest = { },
-            title = { Text("Restore Complete") },
-            text = {
-                Text("Your data has been restored. The app needs to restart to apply the changes.")
-            },
-            confirmButton = {
-                TextButton(onClick = { viewModel.restartApp() }) {
-                    Text("Restart Now")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { viewModel.clearRestoreResult() }) {
-                    Text("Later")
-                }
-            }
-        )
-    }
-
-    // ── AI Provider add/edit dialog ──────────────────
-    if (showAiProviderDialog) {
-        AlertDialog(
-            onDismissRequest = { showAiProviderDialog = false },
-            title = { Text(if (aiApiKey.isNotEmpty()) "Edit AI Provider" else "Add AI Provider") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    // Provider selector
-                    Box {
-                        OutlinedTextField(
-                            value = aiDialogProvider.let { aiProviderNames[it] ?: it },
-                            onValueChange = {},
-                            readOnly = true,
-                            label = { Text("Provider") },
-                            trailingIcon = { Icon(Icons.Filled.ArrowDropDown, null) },
-                            modifier = Modifier.fillMaxWidth(),
-                            enabled = aiApiKey.isEmpty()
-                        )
-                        Box(
-                            modifier = Modifier
-                                .matchParentSize()
-                                .clickable { showAiProviderDropdown = true }
-                        )
-                    }
-
-                    DropdownMenu(
-                        expanded = showAiProviderDropdown,
-                        onDismissRequest = { showAiProviderDropdown = false }
-                    ) {
-                        aiProviderKeys.forEach { key ->
-                            DropdownMenuItem(
-                                text = { Text(aiProviderNames[key] ?: key) },
-                                onClick = {
-                                    aiDialogProvider = key
-                                    aiDialogKey = ""
-                                    aiDialogModel = viewModel.aiProviderModels[key]?.firstOrNull() ?: ""
-                                    aiDialogCustomUrl = ""
-                                    showAiProviderDropdown = false
-                                },
-                                enabled = key != "aicore"
-                            )
-                        }
-                    }
-
-                    OutlinedTextField(
-                        value = aiDialogKey,
-                        onValueChange = { aiDialogKey = it },
-                        label = { Text("API Key") },
-                        placeholder = { Text("Enter your API key") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    if (aiDialogProvider != "custom") {
-                        val models = aiProviderModels[aiDialogProvider] ?: emptyList()
-                        if (models.isNotEmpty()) {
-                            Box {
-                                OutlinedTextField(
-                                    value = aiDialogModel,
-                                    onValueChange = {},
-                                    readOnly = true,
-                                    label = { Text("Model") },
-                                    trailingIcon = { Icon(Icons.Filled.ArrowDropDown, null) },
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                                Box(
-                                    modifier = Modifier
-                                        .matchParentSize()
-                                        .clickable { showAiModelDropdown = true }
-                                )
-                            }
-                            DropdownMenu(
-                                expanded = showAiModelDropdown,
-                                onDismissRequest = { showAiModelDropdown = false }
-                            ) {
-                                models.forEach { model ->
-                                    DropdownMenuItem(
-                                        text = { Text(model) },
-                                        onClick = {
-                                            aiDialogModel = model
-                                            showAiModelDropdown = false
-                                        }
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    if (aiDialogProvider == "custom") {
-                        OutlinedTextField(
-                            value = aiDialogCustomUrl,
-                            onValueChange = { aiDialogCustomUrl = it },
-                            label = { Text("API Base URL") },
-                            placeholder = { Text("https://openrouter.ai/api") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth(),
-                            supportingText = {
-                                Text("The base URL of an OpenAI-compatible API endpoint")
-                            }
-                        )
-                        OutlinedTextField(
-                            value = aiDialogModel,
-                            onValueChange = { aiDialogModel = it },
-                            label = { Text("Model Name") },
-                            placeholder = { Text("openai/gpt-4o-mini") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-
-                    Text(
-                        "Your API key is stored securely on-device and never shared.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        viewModel.saveAiApiKey(aiDialogProvider, aiDialogKey, aiDialogModel, aiDialogCustomUrl)
-                        showAiProviderDialog = false
-                    },
-                    enabled = aiDialogKey.isNotBlank() &&
-                              (aiDialogProvider != "custom" || aiDialogCustomUrl.isNotBlank()) &&
-                              aiDialogProvider != "aicore"
-                ) {
-                    Text("Save")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showAiProviderDialog = false }) {
-                    Text("Cancel")
-                }
-            }
-        )
-    }
-
-    // ── Delete Account confirmation ─────────────────────────────────
-
-    if (showDeleteConfirmDialog) {
-        AlertDialog(
-            onDismissRequest = { showDeleteConfirmDialog = false },
-            icon = { Icon(Icons.Filled.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
-            title = { Text("Delete Account & Data") },
-            text = {
-                Text(
-                    "This will permanently delete all your expenses, income entries, and settings. " +
-                    "This action cannot be undone.",
-                    style = MaterialTheme.typography.bodyMedium
-                )
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        showDeleteConfirmDialog = false
-                        viewModel.deleteAccount()
-                    },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.error,
-                        contentColor = MaterialTheme.colorScheme.onError
-                    ),
-                    enabled = !deleteInProgress
-                ) {
-                    if (deleteInProgress) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(18.dp),
-                            strokeWidth = 2.dp,
-                            color = MaterialTheme.colorScheme.onError
-                        )
-                        Spacer(Modifier.width(8.dp))
-                    }
-                    Text(if (deleteInProgress) "Deleting..." else "Delete Everything")
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = { showDeleteConfirmDialog = false },
-                    enabled = !deleteInProgress
-                ) {
-                    Text("Cancel")
-                }
-            }
-        )
-    }
-}
-
-/**
- * Format file size in human-readable form.
- */
-private fun formatFileSize(bytes: Long): String {
-    return when {
-        bytes < 1024 -> "$bytes B"
-        bytes < 1024 * 1024 -> "${"%.1f".format(bytes / 1024.0)} KB"
-        else -> "${"%.1f".format(bytes / (1024.0 * 1024.0))} MB"
-    }
-}
-
-/**
- * Format a Drive ISO 8601 date string to a readable form.
- */
-private fun formatDriveDate(isoDate: String): String {
-    return try {
-        val sdf = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.US)
-        val out = java.text.SimpleDateFormat("MMM dd, yyyy hh:mm a", java.util.Locale.US)
-        out.format(sdf.parse(isoDate.substringBefore("."))!!)
-    } catch (_: Exception) {
-        isoDate.take(16)
-    }
-}
-
-@Composable
-fun SettingsItem(
-    title: String,
-    subtitle: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    enabled: Boolean = true,
-    isLoading: Boolean = false,
-    onClick: () -> Unit
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(enabled = enabled, onClick = onClick),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        )
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            if (isLoading) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(24.dp),
-                    strokeWidth = 2.dp
-                )
-            } else {
-                Icon(
-                    icon,
-                    contentDescription = null,
-                    tint = if (enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(24.dp)
-                )
-            }
-            Spacer(modifier = Modifier.width(16.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(title, style = MaterialTheme.typography.bodyLarge)
-                Text(subtitle, style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            if (!isLoading) {
-                Icon(Icons.Filled.ChevronRight, contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-    }
-}
-
-@Composable
-fun SwitchSettingsItem(
-    title: String,
-    subtitle: String,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-    icon: androidx.compose.ui.graphics.vector.ImageVector
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        )
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(icon, contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(24.dp))
-            Spacer(modifier = Modifier.width(16.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(title, style = MaterialTheme.typography.bodyLarge)
-                Text(subtitle, style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            Switch(checked = checked, onCheckedChange = onCheckedChange)
-        }
-    }
+    DeleteAccountDialog(
+        visible = showDeleteConfirmDialog,
+        deleteInProgress = deleteInProgress,
+        onConfirm = {
+            showDeleteConfirmDialog = false
+            viewModel.deleteAccount()
+        },
+        onDismiss = { showDeleteConfirmDialog = false }
+    )
 }
