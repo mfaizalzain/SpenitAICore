@@ -29,6 +29,7 @@ import com.fmz.spenitaicore.R
 import com.fmz.spenitaicore.data.db.entity.IncomeSources
 import com.fmz.spenitaicore.data.db.entity.IncomeEntry
 import com.fmz.spenitaicore.ui.components.CompactTopAppBar
+import com.fmz.spenitaicore.ui.components.ConvertedAmountLabel
 import com.fmz.spenitaicore.ui.components.DatePickerField
 import com.fmz.spenitaicore.ui.components.IncomeCard
 import com.fmz.spenitaicore.ui.components.BottomSheetDialog
@@ -481,6 +482,11 @@ fun IncomeScreen(
                         Text(entry.date, style = MaterialTheme.typography.bodyMedium)
                     }
                 }
+                ConvertedAmountLabel(
+                    amount = entry.amount,
+                    fromCurrency = entry.currency,
+                    modifier = Modifier.padding(top = 6.dp)
+                )
                 if (entry.isRecurring) {
                     Spacer(modifier = Modifier.height(8.dp))
                     Text("Recurring: ${entry.recurrenceInterval ?: "Monthly"}",

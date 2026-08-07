@@ -28,6 +28,7 @@ import coil.compose.AsyncImage
 import com.fmz.spenitaicore.data.db.entity.IncomeSources
 import com.fmz.spenitaicore.R
 import com.fmz.spenitaicore.ui.components.CompactTopAppBar
+import com.fmz.spenitaicore.ui.components.ConvertedAmountLabel
 import com.fmz.spenitaicore.ui.components.DatePickerField
 import com.fmz.spenitaicore.viewmodel.ReceiptScanViewModel
 import com.google.mlkit.vision.documentscanner.GmsDocumentScannerOptions
@@ -44,6 +45,7 @@ fun PaySlipScanScreen(
     val hasImage by viewModel.hasImage.collectAsStateWithLifecycle()
     val merchant by viewModel.merchant.collectAsStateWithLifecycle()
     val total by viewModel.total.collectAsStateWithLifecycle()
+    val currency by viewModel.currency.collectAsStateWithLifecycle()
     val date by viewModel.date.collectAsStateWithLifecycle()
     val category by viewModel.category.collectAsStateWithLifecycle()
     val notes by viewModel.notes.collectAsStateWithLifecycle()
@@ -401,6 +403,11 @@ fun PaySlipScanScreen(
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+            )
+            ConvertedAmountLabel(
+                amount = total,
+                fromCurrency = currency,
+                modifier = Modifier.padding(top = 4.dp)
             )
 
             // Date

@@ -32,6 +32,7 @@ import com.fmz.spenitaicore.ui.components.FullBottomSheet
 import com.fmz.spenitaicore.ui.components.BottomSheetDialog
 import com.fmz.spenitaicore.ui.components.DatePickerField
 import com.fmz.spenitaicore.ui.components.AiCoreInstallDialog
+import com.fmz.spenitaicore.ui.components.ConvertedAmountLabel
 import com.fmz.spenitaicore.ui.components.NativeAdCard
 import com.fmz.spenitaicore.ui.components.SharedImportsBadgeIcon
 import com.fmz.spenitaicore.ui.theme.SuccessGreen
@@ -487,6 +488,11 @@ fun DashboardScreen(
                         Text(receipt.date, style = MaterialTheme.typography.bodyMedium)
                     }
                 }
+                ConvertedAmountLabel(
+                    amount = receipt.total,
+                    fromCurrency = receipt.currency,
+                    modifier = Modifier.padding(top = 6.dp)
+                )
                 if (receipt.taxAmount > 0) {
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(

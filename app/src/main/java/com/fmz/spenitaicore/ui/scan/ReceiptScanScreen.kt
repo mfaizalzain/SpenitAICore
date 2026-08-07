@@ -35,6 +35,7 @@ import coil.compose.AsyncImage
 import com.fmz.spenitaicore.data.db.entity.ReceiptItem
 import com.fmz.spenitaicore.R
 import com.fmz.spenitaicore.ui.components.CompactTopAppBar
+import com.fmz.spenitaicore.ui.components.ConvertedAmountLabel
 import com.fmz.spenitaicore.ui.components.DatePickerField
 import com.fmz.spenitaicore.viewmodel.ExpensesViewModel
 import com.fmz.spenitaicore.viewmodel.ReceiptScanViewModel
@@ -53,6 +54,7 @@ fun ReceiptScanScreen(
     val merchant by viewModel.merchant.collectAsStateWithLifecycle()
     val date by viewModel.date.collectAsStateWithLifecycle()
     val total by viewModel.total.collectAsStateWithLifecycle()
+    val currency by viewModel.currency.collectAsStateWithLifecycle()
     val taxAmount by viewModel.taxAmount.collectAsStateWithLifecycle()
     val category by viewModel.category.collectAsStateWithLifecycle()
     val notes by viewModel.notes.collectAsStateWithLifecycle()
@@ -365,6 +367,11 @@ fun ReceiptScanScreen(
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+            )
+            ConvertedAmountLabel(
+                amount = total,
+                fromCurrency = currency,
+                modifier = Modifier.padding(top = 4.dp)
             )
 
             // Tax amount

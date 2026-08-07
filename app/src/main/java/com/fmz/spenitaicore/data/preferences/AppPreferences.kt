@@ -40,6 +40,10 @@ class AppPreferences(private val context: Context) {
         val KEY_AI_MODEL = stringPreferencesKey("ai_model")
         val KEY_AI_CUSTOM_URL = stringPreferencesKey("ai_custom_url")
         val KEY_HAS_DISMISSED_AICORE_DIALOG = booleanPreferencesKey("has_dismissed_aicore_dialog")
+
+        // Exchange rates
+        val KEY_EXCHANGE_RATES_JSON = stringPreferencesKey("exchange_rates_json")
+        val KEY_EXCHANGE_RATES_UPDATED_AT = longPreferencesKey("exchange_rates_updated_at")
     }
 
     val defaultCurrency: Flow<String> = context.dataStore.data.map { prefs ->
@@ -264,6 +268,21 @@ class AppPreferences(private val context: Context) {
     suspend fun setDismissedAiCoreDialog(dismissed: Boolean) {
         context.dataStore.edit { it[KEY_HAS_DISMISSED_AICORE_DIALOG] = dismissed }
     }
+
+    // ── Exchange rates ────────────────────────────────────────────────
+
+    suspend fun setCachedExchangeRates(json: String, updatedAt: Long) {
+        context.dataStore.edit {
+            it[KEY_EXCHANGE_RATES_JSON] = json
+            it[KEY_EXCHANGE_RATES_UPDATED_AT] = updatedAt
+        }
+    }
+
+    suspend fun getCachedRatesJson(): String? =
+        context.dataStore.data.first()[KEY_EXCHANGE_RATES_JSON]
+
+    suspend fun getCachedRatesUpdatedAt(): Long =
+        context.dataStore.data.first()[KEY_EXCHANGE_RATES_UPDATED_AT] ?: 0L
 
     suspend fun clearAll() {
         context.dataStore.edit { it.clear() }

@@ -24,6 +24,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.fmz.spenitaicore.R
 import com.fmz.spenitaicore.data.db.entity.Receipt
 import com.fmz.spenitaicore.ui.components.CompactTopAppBar
+import com.fmz.spenitaicore.ui.components.ConvertedAmountLabel
 import com.fmz.spenitaicore.ui.components.ReceiptCard
 import com.fmz.spenitaicore.ui.components.BottomSheetDialog
 import com.fmz.spenitaicore.ui.components.FullBottomSheet
@@ -558,6 +559,11 @@ fun ExpensesScreen(
                     )
                 }
                 }
+                ConvertedAmountLabel(
+                    amount = receipt.total,
+                    fromCurrency = receipt.currency,
+                    modifier = Modifier.padding(top = 6.dp)
+                )
                 receipt.notes?.let {
                     Spacer(modifier = Modifier.height(8.dp))
                     Text("Notes: $it", style = MaterialTheme.typography.bodyMedium)
